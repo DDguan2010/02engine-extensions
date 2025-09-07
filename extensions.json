@@ -1,6 +1,81 @@
 {
     "extensions": [
         {
+        "slug":"brainfuck",
+        "id":"brainfuck",
+        "name":"Math Stick figure's Brainf**k",
+        "description":"A simple way to run Brainf**k code. Compatible with the Brainf**k experiment in 02Engine.",
+        "nameTranslations":{
+            "de":"Brainf**k",
+            "fi":"Brainf**k",
+            "it":"Brainf**k",
+            "ja":"ブレヌファク",
+            "ko":"Brainf**k",
+            "nb":"Brainf**k",
+            "nl":"Brainf**k",
+            "pl":"Brainf**k",
+            "ru":"Brainf**k",
+            "uk":"Brainf**k",
+            "zh-cn":"数学柴的Brainf**k",
+            "es":"Brainf**k",
+            "fr":"Brainf**k",
+            "pt":"Brainf**k",
+            "tr":"Brainf**k",
+            "zh-tw":"Brainf**k",
+            "cs":"Brainf**k",
+            "da":"Brainf**k",
+            "el":"Brainf**k",
+            "hu":"Brainf**k",
+            "id":"Brainf**k",
+            "lt":"Brainf**k",
+            "pt-br":"Brainf**k",
+            "ro":"Brainf**k",
+            "sv":"Brainf**k",
+            "th":"Brainf**k",
+            "vi":"Brainf**k",
+            "zh-hk":"Brainf**k" 
+        },
+        "descriptionTranslations":{
+            "de":"Eine einfache Möglichkeit, Brainf**k-Code auszuführen. Kompatibel mit dem Brainf**k-Experiment in 02Engine.",
+            "fi":"Yksinkertainen tapa suorittaa Brainf**k-koodia. Yhteensopiva 02Engine:n Brainf**k-kokeilun kanssa.",
+            "it":"Un modo semplice per eseguire codice Brainf**k. Compatibile con l'esperimento Brainf**k in 02Engine.",
+            "ja":"Brainf**kコードを実行する簡単な方法。02EngineのBrainf**k実験と互換性があります。",
+            "ko":"Brainf**k 코드를 실행하는 간단한 방법. 02Engine의 Brainf**k 실험과 호환됩니다.",
+            "nb":"Brainf**k kode er en enkel måte å kjøre på. Kompatibel med Brainf**k-eksperimentet i 02Engine.",
+            "nl":"Een eenvoudige manier om Brainf**k-code uit te voeren. Compatibel met het Brainf**k-experiment in 02Engine.",
+            "ru":"Простой способ выполнения кода Brainf**k. Совместим с экспериментом Brainf**k в 02Engine.",
+            "uk":"Простий спосіб виконання коду Brainf**k. Сумісний з експериментом Brainf**k в 02Engine.",
+            "zh-cn":"一种简单的方式来运行 Brainf**k 代码。兼容于 02Engine 中的 Brainf**k 实验。",
+            "es":"Una forma sencilla de ejecutar código Brainf**k. Compatible con el experimento Brainf**k en 02Engine.",
+            "fr":"Un moyen simple d'exécuter du code Brainf**k. Compatible avec l'expérience Brainf**k dans 02Engine.",
+            "pt":"Uma forma simples de executar código Brainf**k. Compatível com o experimento Brainf**k no 02Engine.",
+            "tr":"Brainf**k kodunu kolayca çalıştırın. 02Engine'de Brainf**k deneyiyle uyumlu.",
+            "zh-tw":"一種簡單的方式來運行 Brainf**k 代碼。兼容於 02Engine 中的 Brainf**k 實驗。",
+            "cs":"Jednoduchý způsob, jak spustit Brainf**k kód. Kompatibilní s Brainf**k experimentem v 02Engine.",
+            "da":"En simpel måde at køre Brainf**k-kode på. Kompatibel med Brainf**k-eksperimentet i 02Engine.",
+            "el":"Ένας απλός τρόπος για να εκτελέσετε κώ δικα Brainf**k. Συμβατό με το πείραμα Brainf**k στο 02Engine.",
+            "hu":"Egy egyszerű mód a Brainf**k kód futtatásására. Kompatibilis a 02Engine Brainf**k-kísérlettel.",
+            "id":"Cara mudah menjalankan kode Brainf**k. Kompatibel dengan percobaan Brainf**k di 02Engine.",
+            "lt":"Lengvais būdais vizualizuoti ir animuoti tekstą. Suderinamas su 02Engine'o Brainf**k eksperimentu.", 
+            "pt-br":"Uma maneira simples de executar código Brainf**k. Compatível com o experimento Brainf**k no 02Engine.",
+            "ro":"O modalitate simplă de a rula cod Brainf**k. Compatibil cu experimentul Brainf**k din 02Engine.",
+            "sv":"Ett enkelt sätt att köra Brainf**k-kod. Kompatibelt med Brainf**k-experimentet i 02Engine.",
+            "th":"วิธีง่ายๆ ในการรันโค้ด Brainf**k. เข้ากันได้กับการทดลอง Brainf**k ใน 02Engine.",
+            "vi":"Một cách đơn giản để chạy mã Brainf**k. Tương thích với thí nghiệm Brainf**k trong 02Engine.",
+            "zh-hk":"一種簡單的方式來運行 Brainf**k 代碼。兼容於 02Engine 中的 Brainf**k 實驗。"
+        },
+        "image":"brainfuck.png",
+        "by":[{
+            "name":"数学柴",
+            "link":""
+        }],
+        "docs": true,
+        "samples": [
+        "brainfuck_sample"
+        ]
+    },
+
+        {
            "slug": "cybertoolbox",
             "id": "toolbox",
             "name": "Cybertoolbox",
@@ -174,6 +249,7 @@
     ]
 
 }
+
 
 
 
