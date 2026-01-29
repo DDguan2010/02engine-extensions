@@ -1,4 +1,4 @@
-class XiMecsTechnology{
+class MoistsTechnology{
     constructor() {
         // 初始化鼠标事件状态变量
         this.isDoubleClick = false;
@@ -8,6 +8,10 @@ class XiMecsTechnology{
             middle: false,
             right: false
         };
+        
+        // 对话框相关状态变量
+        this.dialogTextVisible = false;
+        this.dialogTextSize = 'medium'; // 默认中等大小
         
         // 双击检测
         let lastClickTime = 0;
@@ -72,8 +76,8 @@ class XiMecsTechnology{
     
     getInfo() {
         return {
-            id: 'XiMecsTechnology',
-            name: 'Ximec\'s Technology',
+            id: 'MoistsTechnology',
+            name: 'Moist\'s Technology',
             color1: '#00BFFF',
             color2: '#FF00FF',
             blocks: [
@@ -864,6 +868,11 @@ class XiMecsTechnology{
                     text:'对话框'
                 }
                 ,{
+                    opcode:'isDialogTextVisible',
+                    blockType:'Boolean',
+                    text:'对话框文字显示中?'
+                }
+                ,{
                     opcode:'ShowDialogFontColorPicker',
                     blockType:'command',
                     text:'设置对话框字体颜色(弹窗选择)'
@@ -880,9 +889,21 @@ class XiMecsTechnology{
                     }
                 }
                 ,{
+                    opcode:'SetDialogTextSize',
+                    blockType:'command',
+                    text:'设置对话框文字大小为[textSize]',
+                    arguments:{
+                        textSize:{
+                            type:'string',
+                            menu:'textSizeMenu',
+                            defaultValue:'中'
+                        }
+                    }
+                }
+                ,{
                     opcode:'ShowDialog',
                     blockType:'command',
-                    text:'显示对话框,显示模式[showMode],文字位置[fontPosition],标题[title],内容[content],对话框位置[position]',
+                    text:'显示对话框,显示模式[showMode],文字位置[fontPosition],文字效果[textEffect],标题[title],内容[content],对话框位置[position]',
                     arguments:{
                         showMode:{
                             type:'string',
@@ -898,6 +919,11 @@ class XiMecsTechnology{
                             type:'string',
                             menu:'fontPositionMenu',
                             defaultValue:'left'
+                        },
+                        textEffect:{
+                            type:'string',
+                            menu:'textEffectMenu',
+                            defaultValue:'普通'
                         },
                         title:{
                             type:'string',
@@ -1009,6 +1035,13 @@ class XiMecsTechnology{
                 }
             ],
             menus: {
+                textSizeMenu: [
+                    { value: 'tiny', text: '微' },
+                    { value: 'small', text: '小' },
+                    { value: 'medium', text: '中' },
+                    { value: 'large', text: '大' },
+                    { value: 'huge', text: '巨大' }
+                ],
                 transformMenu: [
                     { value: 'uppercase', text: '大写' },
                     { value: 'lowercase', text: '小写' },
@@ -1122,6 +1155,13 @@ class XiMecsTechnology{
                     { value: 'typewriter', text: '逐字显示' },
                     { value: 'fade', text: '渐变显示' },
                     { value: 'direct', text: '直接显示' },
+                ],
+                textEffectMenu: [
+                    { value: 'normal', text: '普通' },
+                    { value: 'shake', text: '颤抖' },
+                    { value: 'color', text: '变色' },
+                    { value: 'gibberish', text: '胡言乱语' },
+                    { value: 'random', text: '随机' },
                 ],
                 fontPositionMenu: [
                     { value: 'left', text: '左对齐' },
@@ -3361,6 +3401,7 @@ class XiMecsTechnology{
     ShowDialog(args){
         const showMode = args.showMode || 'typewriter';
         const fontPosition = args.fontPosition || 'left';
+        const textEffect = args.textEffect || 'normal';
         const title = args.title || 'LittleTechnology';
         const content = args.content || '消息';
         
@@ -3406,8 +3447,16 @@ class XiMecsTechnology{
         
         // 内容区域
         const contentArea = document.createElement('div');
+        // 根据文字大小设置字体大小
+        const sizeMap = {
+            'tiny': '12px',
+            'small': '14px',
+            'medium': '16px',
+            'large': '18px',
+            'huge': '24px'
+        };
         contentArea.style.cssText = `
-            font-size: 14px;
+            font-size: ${sizeMap[this.dialogTextSize] || '16px'};
             line-height: 1.5;
             text-align: ${fontPosition};
             min-height: 50px;
@@ -3431,7 +3480,17 @@ class XiMecsTechnology{
         `;
         closeButton.textContent = '×';
         closeButton.onclick = () => {
+            // 清理文字效果
+            if (contentArea._shakeTimer) {
+                clearInterval(contentArea._shakeTimer);
+                contentArea._shakeTimer = null;
+            }
+            if (contentArea._cleanupShake) {
+                contentArea._cleanupShake();
+                contentArea._cleanupShake = null;
+            }
             document.body.removeChild(dialog);
+            this.dialogTextVisible = false;
         };
         
         // 组装对话框
@@ -3441,6 +3500,9 @@ class XiMecsTechnology{
         
         // 添加到页面
         document.body.appendChild(dialog);
+        
+        // 更新对话框显示状态
+        this.dialogTextVisible = true;
         
         // 根据显示模式处理内容显示
         if (showMode === 'typewriter') {
@@ -3500,21 +3562,174 @@ class XiMecsTechnology{
             contentArea.textContent = content;
         }
         
+        // 应用文字效果
+        this.applyTextEffect(contentArea, textEffect, content);
+        
         // 点击对话框外部关闭
         dialog.addEventListener('click', (e) => {
             if (e.target === dialog) {
+                // 清理文字效果
+                if (contentArea._shakeTimer) {
+                    clearInterval(contentArea._shakeTimer);
+                    contentArea._shakeTimer = null;
+                }
+                if (contentArea._cleanupShake) {
+                    contentArea._cleanupShake();
+                    contentArea._cleanupShake = null;
+                }
                 document.body.removeChild(dialog);
+                this.dialogTextVisible = false;
             }
         });
         
         // 添加ESC键关闭功能
         const handleKeyPress = (e) => {
             if (e.key === 'Escape') {
+                // 清理文字效果
+                if (contentArea._shakeTimer) {
+                    clearInterval(contentArea._shakeTimer);
+                    contentArea._shakeTimer = null;
+                }
+                if (contentArea._cleanupShake) {
+                    contentArea._cleanupShake();
+                    contentArea._cleanupShake = null;
+                }
                 document.body.removeChild(dialog);
+                this.dialogTextVisible = false;
                 document.removeEventListener('keydown', handleKeyPress);
             }
         };
         document.addEventListener('keydown', handleKeyPress);
+    }
+    
+    // 应用文字效果
+    applyTextEffect(element, effectType, originalContent) {
+        // 清除之前的效果
+        element.innerHTML = originalContent;
+        element.style.animation = 'none';
+        element.style.filter = 'none';
+        
+        // 清除颤抖效果的定时器
+        if (element._shakeTimer) {
+            clearInterval(element._shakeTimer);
+            element._shakeTimer = null;
+        }
+        
+        // 调用颤抖效果的清理函数（如果有）
+        if (element._cleanupShake) {
+            element._cleanupShake();
+            element._cleanupShake = null;
+        }
+        
+        // 随机文字效果的辅助函数
+        const getRandomEffect = () => {
+            const effects = ['normal', 'shake', 'color', 'gibberish'];
+            return effects[Math.floor(Math.random() * effects.length)];
+        };
+        
+        // 如果是随机效果，先随机选择一个效果类型
+        const actualEffect = effectType === 'random' ? getRandomEffect() : effectType;
+        
+        switch (actualEffect) {
+            case 'shake':
+                // 颤抖效果（上下左右随机）
+                // 清除之前的动画效果
+                element.style.animation = 'none';
+                element.style.position = 'relative';
+                element.style.left = '0';
+                element.style.top = '0';
+                
+                // 保存原始位置
+                const originalPosition = {
+                    left: element.style.left,
+                    top: element.style.top,
+                    position: element.style.position
+                };
+                
+                // 清除之前的定时器（如果有）
+                if (element._shakeTimer) {
+                    clearInterval(element._shakeTimer);
+                }
+                
+                // 创建随机颤抖效果
+                element._shakeTimer = setInterval(() => {
+                    const randomX = Math.floor(Math.random() * 10) - 5; // -5到4的随机值
+                    const randomY = Math.floor(Math.random() * 10) - 5; // -5到4的随机值
+                    element.style.left = randomX + 'px';
+                    element.style.top = randomY + 'px';
+                }, 100);
+                
+                // 确保在效果切换或元素移除时清除定时器
+                const cleanupShake = () => {
+                    if (element._shakeTimer) {
+                        clearInterval(element._shakeTimer);
+                        element._shakeTimer = null;
+                    }
+                    // 恢复原始位置
+                    element.style.position = originalPosition.position;
+                    element.style.left = originalPosition.left;
+                    element.style.top = originalPosition.top;
+                };
+                
+                // 存储清理函数，以便在需要时调用
+                element._cleanupShake = cleanupShake;
+                break;
+                
+            case 'color':
+                // 变色效果
+                element.style.animation = 'colorChange 1s infinite';
+                // 添加变色动画样式
+                if (!document.getElementById('colorAnimation')) {
+                    const style = document.createElement('style');
+                    style.id = 'colorAnimation';
+                    style.textContent = `
+                        @keyframes colorChange {
+                            0% { color: red; }
+                            25% { color: blue; }
+                            50% { color: green; }
+                            75% { color: yellow; }
+                            100% { color: red; }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+                break;
+                
+            case 'gibberish':
+                // 胡言乱语效果（随机替换字符）
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
+                let gibberishText = '';
+                
+                for (let i = 0; i < originalContent.length; i++) {
+                    // 保留空格和标点符号
+                    if (originalContent[i].match(/[\s\p{P}]/u)) {
+                        gibberishText += originalContent[i];
+                    } else {
+                        gibberishText += chars[Math.floor(Math.random() * chars.length)];
+                    }
+                }
+                
+                element.textContent = gibberishText;
+                break;
+                
+            case 'normal':
+            default:
+                // 普通效果，不做任何处理
+                break;
+        }
+    }
+    
+    // 侦测对话框文字是否显示中
+    isDialogTextVisible() {
+        return this.dialogTextVisible;
+    }
+    
+    // 设置对话框文字大小
+    SetDialogTextSize(args) {
+        const size = args.textSize;
+        if (['tiny', 'small', 'medium', 'large', 'huge'].includes(size)) {
+            this.dialogTextSize = size;
+        }
     }
     
     IfThenElse(args){
@@ -3933,4 +4148,4 @@ class XiMecsTechnology{
         return this.mouseButtons[button] || false;
     }
 }
-Scratch.extensions.register(new XiMecsTechnology());
+Scratch.extensions.register(new MoistsTechnology());

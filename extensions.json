@@ -239,11 +239,11 @@
             "docs": true
         },
         {
-            "slug": "XiMecsTechnology",
-            "id": "XiMecsTechnology",
-            "name": "XiMecsTechnology",
+            "slug": "MoistsTechnology",
+            "id": "MoistsTechnology",
+            "name": "MoistsTechnology",
             "description": "一个由汐.mec开发的千奇百怪工具箱😈",
-            "image": "XiMecsTechnology.png",
+            "image": "MoistsTechnology.png",
             "by": [
                 {
                     "name": "汐.mec",
@@ -558,7 +558,7 @@
             "slug": "移动端按键映射",
             "id": "移动端按键映射",
             "name": "移动端按键映射",
-            "description": "简单的艺术字显示扩展",
+            "description": "Advanced touch blocks and joystick with key simulation (触屏块加摇杆并且可实现按键模拟)",
             "image": "移动端按键映射.png",
             "by": [
                 {
@@ -569,6 +569,128 @@
             "docs": false,
             "samples": [
                 "移动端按键映射"
+            ]
+        },
+        {
+            "slug": "SF文件系统",
+            "id": "SF文件系统",
+            "name": "SF文件系统",
+            "description": "让数据有了形状",
+            "image": "SF文件系统.png",
+            "by": [
+                {
+                    "name": "Starfall Twilight",
+                    "link": "https://starfallstudio.cn"
+                }
+            ],
+            "docs": false
+        },
+        {
+            "slug": "简·HTML",
+            "id": "简·HTML",
+            "name": "简·HTML",
+            "description": "一款强大的HTML构建拓展（建议与“内嵌框架”搭配使用）",
+            "image": "简·HTML.png",
+            "by": [
+                {
+                    "name": "Starfall Twilight",
+                    "link": "https://starfallstudio.cn"
+                }
+            ],
+            "docs": false
+        },
+        {
+            "slug": "简易3D",
+            "id": "简易3D",
+            "name": "简易3D",
+            "description": "轻松制作适用于GPU加速的3D项目",
+            "image": "简易3D.png",
+            "by": [
+                {
+                    "name": "Starfall Twilight（汉化）",
+                    "link": "https://scratch.mit.edu/users/Vadik1/"
+                },
+                {
+                    "name": "Vadik1",
+                    "link": "https://starfallstudio.cn"
+                }
+            ],
+            "docs": false,
+            "samples": [
+                "简易3D"
+            ]
+        },
+        {
+            "slug": "全局提示",
+            "id": "全局提示",
+            "name": "全局提示",
+            "description": "信息全掌握",
+            "image": "全局提示.png",
+            "by": [
+                {
+                    "name": "Starfall Twilight",
+                    "link": "https://starfallstudio.cn"
+                }
+            ],
+            "docs": false
+        },
+        {
+            "slug": "微CSV",
+            "id": "微CSV",
+            "name": "微CSV",
+            "description": "轻表格 轻数据 轻管理",
+            "image": "微CSV.png",
+            "by": [
+                {
+                    "name": "Starfall Twilight",
+                    "link": "https://starfallstudio.cn"
+                }
+            ],
+            "docs": false
+        },
+        {
+            "slug": "星级评分",
+            "id": "星级评分",
+            "name": "星级评分",
+            "description": "快捷获取用户评价",
+            "image": "星级评分.png",
+            "by": [
+                {
+                    "name": "Starfall Twilight",
+                    "link": "https://starfallstudio.cn"
+                }
+            ],
+            "docs": false
+        },
+        {
+            "slug": "字符串处理",
+            "id": "字符串处理",
+            "name": "字符串处理",
+            "description": "一些快捷的字符串处理积木",
+            "image": "字符串处理.png",
+            "by": [
+                {
+                    "name": "Starfall Twilight",
+                    "link": "https://starfallstudio.cn"
+                }
+            ],
+            "docs": false
+        },
+        {
+            "slug": "网页嗅探器",
+            "id": "网页嗅探器",
+            "name": "网页嗅探器",
+            "description": "让你轻松获取到网页上的内容，只要是能获取到的，都能下！",
+            "image": "网页嗅探器.png",
+            "by": [
+                {
+                    "name": "F_code",
+                    "link": "https://space.bilibili.com/3546722598914878"
+                }
+            ],
+            "docs": false,
+            "samples": [
+                "网页嗅探器"
             ]
         }
     ]
