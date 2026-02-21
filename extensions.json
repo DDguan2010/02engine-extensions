@@ -692,7 +692,85 @@
             "samples": [
                 "网页嗅探器"
             ]
-        }
+        },
+        {
+            "slug": "hermiteCurve",
+            "id": "hermiteCurve",
+            "name": "hermite曲线",
+            "description": "保证定点定速度的自定义曲线。",
+            "image": "hermiteCurve.png",
+            "by": [
+                {
+                    "name": "空明2403",
+                    "link": "https://m.bilibili.com/space/3493092640426109?spm_id_from=333.33.0.0"
+                }
+            ],
+            "docs": false,
+            "samples": [
+                "hermiteCurveExample"
+            ]
+        },
+        {
+            "slug": "markdown",
+            "id": "WitCatMarkDown",
+            "name": "WitCat MarkDown",
+            "description": "Render Markdown content with custom syntax, tables, code highlighting, and interactive triggers.",
+            "nameTranslations": {
+                "zh-cn": "白猫的markdown"
+            },
+            "descriptionTranslations": {
+                "zh-cn": "渲染 Markdown 内容，支持自定义语法、表格、代码高亮和交互触发器。"
+            },
+            "image": "markdown.svg",
+            "by": [
+                {
+                "name": "白猫",
+                "link": "https://www.ccw.site/student/6173f57f48cf8f4796fc860e"
+                },
+                {
+                "name": "yuan",
+                "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
+                }
+            ],
+            "docs": false,
+            "samples": [
+                "markdown"
+            ]
+        },
+        {
+            "slug": "拼音转文字",
+            "id": "拼音转文字",
+            "name": "拼音转文字",
+            "description": "将拼音转换为汉字。",
+            "image": "拼音转文字.png",
+            "by": [
+                {
+                    "name": "Uonsan",
+                    "link": "https://space.bilibili.com/3546882573862975"
+                }
+            ],
+            "docs": false,
+            "samples": [
+                "拼音转文字"
+            ]
+        },
+        {
+            "slug": "网页嗅探器",
+            "id": "网页嗅探器",
+            "name": "网页嗅探器",
+            "description": "让你轻松获取到网页上的内容，只要是能获取到的，都能下！",
+            "image": "网页嗅探器.png",
+            "by": [
+                {
+                    "name": "F_code",
+                    "link": "https://space.bilibili.com/3546722598914878"
+                }
+            ],
+            "docs": false,
+            "samples": [
+                "网页嗅探器"
+            ]
+        }    
     ]
 }
 
