@@ -753,26 +753,10 @@
             "samples": [
                 "拼音转文字"
             ]
-        },
-        {
-            "slug": "网页嗅探器",
-            "id": "网页嗅探器",
-            "name": "网页嗅探器",
-            "description": "让你轻松获取到网页上的内容，只要是能获取到的，都能下！",
-            "image": "网页嗅探器.png",
-            "by": [
-                {
-                    "name": "F_code",
-                    "link": "https://space.bilibili.com/3546722598914878"
-                }
-            ],
-            "docs": false,
-            "samples": [
-                "网页嗅探器"
-            ]
-        }    
+        } 
     ]
 }
+
 
 
 
