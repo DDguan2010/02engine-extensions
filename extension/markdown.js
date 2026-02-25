@@ -43,6 +43,42 @@
     // 初始化自定义规则数组
     markdownExpose.customRules = [];
 
+    // ======== 解析管线（固定解析 + 自定义规则）========
+    markdownExpose.pipeline = [
+      { id: 'normalizeNewlines', name: '换行规范化(\\r\\n/\\r -> \\n, \\n转义)', enabled: true },
+      { id: 'protectHtmlBlock', name: '[html]块保护(把块内\\n替换为\\uE000)', enabled: true },
+      { id: 'protectRowspan', name: '表格Rowspan保护(^^ -> \\uE001)', enabled: true },
+      { id: 'customRules', name: '自定义规则(可多条)', enabled: true },
+      { id: 'builtinHighlight', name: '内置高亮(==text== -> <mark>)', enabled: true },
+      { id: 'builtinSup', name: '内置上标(^text^ -> <sup>)', enabled: true },
+      { id: 'builtinSub', name: '内置下标(~text~ -> <sub>)', enabled: true },
+      { id: 'restoreRowspan', name: '还原Rowspan(\\uE001 -> ^^)', enabled: true },
+      { id: 'autoLineBreak', name: '自动换行(单\\n -> 两空格+\\n)', enabled: true }
+    ];
+
+    // 允许从 localStorage 恢复顺序
+    try {
+      const saved = localStorage.getItem('WitCatMarkDown_pipeline');
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr) && arr.length) {
+          const map = new Map(markdownExpose.pipeline.map(x => [x.id, x]));
+          const merged = [];
+          arr.forEach(item => { 
+            let id = typeof item === 'string' ? item : item.id;
+            let enabled = typeof item === 'object' ? item.enabled : true;
+            if (map.has(id)) {
+              let step = map.get(id);
+              step.enabled = enabled;
+              merged.push(step);
+            }
+          });
+          markdownExpose.pipeline.forEach(x => { if (!merged.includes(x)) merged.push(x); });
+          markdownExpose.pipeline = merged;
+        }
+      }
+    } catch (e) {}
+
     function CloseTag(len) {
       this.len_after = len;
       this.name = "close";
@@ -89,47 +125,68 @@
         if (source === null || source === undefined) return "";
         source = String(source);
 
-        source = source.replace(/(\r\n|\r)/g, "\n");
-        source = source.replace(/\\n/g, "\n");
+        const pipe = markdownExpose.pipeline || [];
+        for (let i = 0; i < pipe.length; i++) {
+          const step = pipe[i];
+          if (!step || step.enabled === false) continue;
 
-        // [html] 块保护
-        source = source.replace(regexProtectHtml, function(match) {
-           return match.replace(/\n/g, "\uE000");
-        });
+          switch (step.id) {
+            case 'normalizeNewlines':
+              source = source.replace(/(\r\n|\r)/g, "\n");
+              source = source.replace(/\\n/g, "\n");
+              break;
 
-        // 表格 Rowspan (^^) 保护
-        source = source.replace(regexRowspan, "\uE001");
+            case 'protectHtmlBlock':
+              source = source.replace(regexProtectHtml, function(match) {
+                return match.replace(/\n/g, "\uE000");
+              });
+              break;
 
-        // 用户自定义规则 (优先级高)
-        if (markdownExpose.customRules && markdownExpose.customRules.length > 0) {
-          for (var i = 0; i < markdownExpose.customRules.length; i++) {
-            var rule = markdownExpose.customRules[i];
-            try {
-              var regex = rule.regex || rule; 
-              var replaceStr = rule.replace;
-              if (regex instanceof RegExp) {
-                 source = source.replace(regex, replaceStr);
+            case 'protectRowspan':
+              source = source.replace(regexRowspan, "\uE001");
+              break;
+
+            case 'customRules':
+              if (markdownExpose.customRules && markdownExpose.customRules.length > 0) {
+                for (var r = 0; r < markdownExpose.customRules.length; r++) {
+                  var rule = markdownExpose.customRules[r];
+                  try {
+                    var regex = rule.regex || rule;
+                    var replaceStr = rule.replace;
+                    if (regex instanceof RegExp) {
+                      source = source.replace(regex, replaceStr);
+                    }
+                  } catch (err) {
+                    console.warn('Custom rule replace error:', err);
+                  }
+                }
               }
-            } catch (err) {
-              console.warn('Custom rule replace error:', err);
-            }
+              break;
+
+            case 'builtinHighlight':
+              source = source.replace(regexHighlight, "<mark>$1</mark>");
+              break;
+
+            case 'builtinSup':
+              source = source.replace(regexSup, "<sup>$1</sup>");
+              break;
+
+            case 'builtinSub':
+              source = source.replace(regexSub, "<sub>$1</sub>");
+              break;
+
+            case 'restoreRowspan':
+              source = source.replace(regexRestoreRowspan, "^^");
+              break;
+
+            case 'autoLineBreak':
+              if (window.WitCatMarkDownAutoLineBreak !== false) {
+                source = source.replace(regexAutoLine, function (_, a, b) {
+                  return a + "  \n" + b;
+                });
+              }
+              break;
           }
-        }
-
-        // 内置自定义语法解析
-        source = source.replace(regexHighlight, "<mark>$1</mark>");
-        source = source.replace(regexSup, "<sup>$1</sup>");
-        source = source.replace(regexSub, "<sub>$1</sub>");
-        
-        // 还原保护字符
-        source = source.replace(regexRestoreRowspan, "^^");
-
-        // 处理自动换行
-        var autoLineBreakEnabled = window.WitCatMarkDownAutoLineBreak !== false;
-        if (autoLineBreakEnabled) {
-          source = source.replace(regexAutoLine, function (_, a, b) {
-            return a + "  \n" + b;
-          });
         }
 
         return source;
@@ -1044,14 +1101,14 @@
       options.root = options.root || false;
       var content = [];
       if (options.root) {
-        content.push(render_tree(jsonml));
+        content.push(render_tree(jsonml, false));
       } else {
         jsonml.shift();
         if (jsonml.length && typeof jsonml[0] === "object" && !(jsonml[0] instanceof Array)) {
           jsonml.shift();
         }
         while (jsonml.length) {
-          content.push(render_tree(jsonml.shift()));
+          content.push(render_tree(jsonml.shift(), false));
         }
       }
       return content.join("\n\n");
@@ -1066,9 +1123,10 @@
         .replace(/'/g, "&#39;");
     }
 
-    function render_tree(jsonml) {
+    function render_tree(jsonml, inCode) {
       if (typeof jsonml === "string") {
-        return escapeHTML(jsonml);
+        // 开启不安全 HTML 渲染，但如果处于代码块内部，依然要强制转义，防止代码变成真实 DOM
+        return inCode ? escapeHTML(jsonml) : jsonml;
       }
       var tag = jsonml.shift();
 
@@ -1076,13 +1134,16 @@
          return jsonml[0]; 
       }
 
+      var isCode = (tag === "code" || tag === "pre");
+      var passInCode = inCode || isCode;
+
       var attributes = {},
         content = [];
       if (jsonml.length && typeof jsonml[0] === "object" && !(jsonml[0] instanceof Array)) {
         attributes = jsonml.shift();
       }
       while (jsonml.length) {
-        content.push(render_tree(jsonml.shift()));
+        content.push(render_tree(jsonml.shift(), passInCode));
       }
       var tag_attrs = "";
       for (var a in attributes) {
@@ -2584,6 +2645,7 @@
             font-size: 14px;
             line-height: 1.5;
             outline: none;
+            transition: background-color 0.2s;
         }
         .wc-editor-preview {
             width: 50%;
@@ -2841,7 +2903,7 @@
                 <div class="wc-editor-main">
                     <div class="wc-editor-toolbar" id="wc-toolbar"></div>
                     <div class="wc-editor-split-view">
-                        <textarea class="wc-editor-area" id="wc-editor-textarea" placeholder="在此输入 Markdown..."></textarea>
+                        <textarea class="wc-editor-area" id="wc-editor-textarea" placeholder="在此输入 Markdown... 可以拖入本地图片转Base64"></textarea>
                         <div id="wc-editor-preview" class="WitCatMarkDown wc-editor-preview"></div>
                     </div>
                     <div class="wc-editor-footer">
@@ -2921,6 +2983,70 @@
 
         textarea.addEventListener('input', debouncedUpdate);
 
+        // 拖拽本地图片转 Base64 语法
+        textarea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            textarea.style.backgroundColor = '#f0f7ff';
+        });
+
+        textarea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            textarea.style.backgroundColor = '';
+        });
+
+        textarea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            textarea.style.backgroundColor = '';
+            
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                const file = e.dataTransfer.files[0];
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const base64 = event.target.result;
+                        const start = textarea.selectionStart;
+                        const end = textarea.selectionEnd;
+                        const text = textarea.value;
+                        const imgSyntax = `![${file.name}](${base64})`;
+                        
+                        textarea.value = text.substring(0, start) + imgSyntax + text.substring(end);
+                        textarea.selectionStart = textarea.selectionEnd = start + imgSyntax.length;
+                        
+                        textarea.dispatchEvent(new Event('input'));
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+        });
+
+        // 剪贴板粘贴本地图片转 Base64 语法
+        textarea.addEventListener('paste', (e) => {
+            if (e.clipboardData && e.clipboardData.items) {
+                const items = e.clipboardData.items;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.startsWith('image/')) {
+                        const file = items[i].getAsFile();
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            const base64 = event.target.result;
+                            const start = textarea.selectionStart;
+                            const end = textarea.selectionEnd;
+                            const text = textarea.value;
+                            const imgSyntax = `![image](${base64})`;
+                            
+                            textarea.value = text.substring(0, start) + imgSyntax + text.substring(end);
+                            textarea.selectionStart = textarea.selectionEnd = start + imgSyntax.length;
+                            
+                            textarea.dispatchEvent(new Event('input'));
+                        };
+                        reader.readAsDataURL(file);
+                        e.preventDefault();
+                        break;
+                    }
+                }
+            }
+        });
+
         let isSyncingLeftScroll = false;
         let isSyncingRightScroll = false;
 
@@ -2958,6 +3084,11 @@
                     <span>自定义规则管理</span>
                     <button class="wc-editor-btn" style="flex:0 0 50px;background:#fcecec;border-color:#f5c6c6;" onclick="document.getElementById('WitCatRulePanel').style.display='none'">关闭</button>
                 </div>
+                <div class="wc-rule-controls" style="border-bottom:none;">
+                    <span style="font-weight:bold;flex:1;display:flex;align-items:center;">解析顺序(拖动排序)</span>
+                    <button class="wc-editor-btn" style="flex:0 0 60px;" id="wc-pipe-reset-btn">重置</button>
+                </div>
+                <ul id="wc-pipe-list" class="wc-rule-list" style="max-height:160px; border-bottom:1px solid #ddd;"></ul>
                 <div class="wc-rule-controls">
                     <input id="wc-rule-match-input" class="wc-rule-input" placeholder="匹配正则 (如 \\[tag\\](.*?)\\[/tag\\])">
                     <input id="wc-rule-replace-input" class="wc-rule-input" placeholder="替换内容 (如 <b>$1</b>)">
@@ -2989,6 +3120,93 @@
         const searchInput = document.getElementById('wc-rule-search');
         const testInput = document.getElementById('wc-rule-test-input');
         const testOutput = document.getElementById('wc-rule-test-output');
+        const pipeListEl = document.getElementById('wc-pipe-list');
+
+        const savePipelineOrder = () => {
+          try {
+            const dataToSave = this.markdownExpose.pipeline.map(x => ({ id: x.id, enabled: x.enabled }));
+            localStorage.setItem('WitCatMarkDown_pipeline', JSON.stringify(dataToSave));
+          } catch (e) {}
+        };
+
+        const renderPipeline = () => {
+          const pipe = this.markdownExpose.pipeline || [];
+          pipeListEl.innerHTML = '';
+
+          pipe.forEach((step, index) => {
+            const li = document.createElement('li');
+            li.className = 'wc-rule-item';
+            li.draggable = true;
+            li.dataset.index = String(index);
+            li.style.cursor = 'grab';
+
+            let extra = '';
+            if (step.id === 'customRules') {
+              extra = `（${(this.markdownExpose.customRules || []).length}条）`;
+            }
+
+            li.innerHTML = `
+              <div class="wc-rule-info" style="pointer-events: none;">
+                <span class="wc-rule-match">${index + 1}.</span>
+                <span style="margin-left:8px; font-family: sans-serif; font-size: 13px;">${step.name}${extra}</span>
+              </div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <span style="font-size:12px;color:#666;">启用</span>
+                <input type="checkbox" ${step.enabled === false ? '' : 'checked'}>
+              </label>
+            `;
+
+            // 启用/禁用
+            li.querySelector('input[type="checkbox"]').onchange = (e) => {
+              step.enabled = !!e.target.checked;
+              savePipelineOrder();
+              updateTestPreview();
+            };
+
+            // 拖动排序
+            li.addEventListener('dragstart', (e) => {
+              e.dataTransfer.setData('text/plain', li.dataset.index);
+              e.dataTransfer.effectAllowed = 'move';
+              li.style.opacity = '0.5';
+            });
+            li.addEventListener('dragend', (e) => {
+              li.style.opacity = '1';
+            });
+            li.addEventListener('dragover', (e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              li.style.background = '#f0f7ff';
+            });
+            li.addEventListener('dragleave', (e) => {
+              li.style.background = '';
+            });
+            li.addEventListener('drop', (e) => {
+              e.preventDefault();
+              li.style.background = '';
+              const fromStr = e.dataTransfer.getData('text/plain');
+              if(!fromStr) return;
+              const from = Number(fromStr);
+              const to = Number(li.dataset.index);
+              if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
+
+              const arr = this.markdownExpose.pipeline;
+              const item = arr.splice(from, 1)[0];
+              arr.splice(to, 0, item);
+
+              savePipelineOrder();
+              renderPipeline();
+              updateTestPreview();
+            });
+
+            pipeListEl.appendChild(li);
+          });
+        };
+
+        document.getElementById('wc-pipe-reset-btn').onclick = () => {
+          if (!confirm('确定重置解析顺序吗？')) return;
+          localStorage.removeItem('WitCatMarkDown_pipeline');
+          location.reload();
+        };
 
         const renderRules = () => {
             const filter = searchInput.value.toLowerCase();
@@ -3016,6 +3234,7 @@
                 li.querySelector('button').onclick = () => {
                     this.markdownExpose.customRules.splice(index, 1);
                     renderRules();
+                    renderPipeline();
                     updateTestPreview();
                 };
 
@@ -3036,6 +3255,7 @@
                 matchInput.value = '';
                 replaceInput.value = '';
                 renderRules();
+                renderPipeline();
                 updateTestPreview();
             } catch (e) {
                 alert("正则表达式错误: " + e.message);
@@ -3048,6 +3268,7 @@
             if(confirm("确定清空所有自定义规则吗？")) {
                 this.markdownExpose.customRules = [];
                 renderRules();
+                renderPipeline();
                 updateTestPreview();
             }
         };
@@ -3083,6 +3304,7 @@
                             }
                         });
                         renderRules();
+                        renderPipeline();
                         updateTestPreview();
                         alert(`成功导入 ${data.length} 条规则`);
                     }
@@ -3101,6 +3323,7 @@
         testInput.addEventListener('input', updateTestPreview);
 
         renderRules();
+        renderPipeline();
     }
 
     _initToolbar() {
