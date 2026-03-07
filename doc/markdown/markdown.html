@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>WitCatMarkDown 扩展文档</title>
+   <style>
+       * {
+           margin: 0;
+           padding: 0;
+           box-sizing: border-box;
+       }
+
+       body {
+           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+           line-height: 1.7;
+           color: #333;
+           background: #f8f9fa;
+           padding: 20px;
+       }
+
+       .container {
+           max-width: 1200px;
+           margin: 0 auto;
+           background: white;
+           border-radius: 12px;
+           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+           overflow: hidden;
+       }
+
+       header {
+           background: linear-gradient(135deg, #1c7321 0%, #114514 100%);
+           color: white;
+           padding: 40px 30px;
+           text-align: center;
+       }
+
+       header h1 {
+           font-size: 2.5em;
+           margin-bottom: 10px;
+           font-weight: 600;
+       }
+
+       header p {
+           font-size: 1.1em;
+           opacity: 0.9;
+       }
+
+       .content {
+           padding: 40px;
+       }
+
+       section {
+           margin-bottom: 50px;
+       }
+
+       h2 {
+           color: #1c7321;
+           font-size: 1.8em;
+           margin-bottom: 20px;
+           padding-bottom: 10px;
+           border-bottom: 3px solid #eef7ee;
+       }
+
+       h3 {
+           color: #114514;
+           font-size: 1.4em;
+           margin: 25px 0 15px 0;
+       }
+
+       h4 {
+           color: #333;
+           font-size: 1.1em;
+           margin: 20px 0 10px 0;
+       }
+
+       p {
+           margin-bottom: 15px;
+           color: #555;
+       }
+
+       ul, ol {
+           margin: 15px 0;
+           padding-left: 25px;
+       }
+
+       li {
+           margin-bottom: 8px;
+       }
+
+       code {
+           background: #f5f5f5;
+           padding: 2px 6px;
+           border-radius: 4px;
+           font-family: 'Consolas', 'Monaco', monospace;
+           font-size: 0.95em;
+           color: #d32f2f;
+       }
+
+       pre {
+           background: #282c34;
+           color: #abb2bf;
+           padding: 15px;
+           border-radius: 8px;
+           overflow-x: auto;
+           margin: 15px 0;
+           font-family: 'Consolas', 'Monaco', monospace;
+           font-size: 14px;
+           line-height: 1.5;
+       }
+
+       pre code {
+           background: none;
+           padding: 0;
+           color: inherit;
+       }
+
+       table {
+           width: 100%;
+           border-collapse: collapse;
+           margin: 20px 0;
+           background: white;
+           border-radius: 8px;
+           overflow: hidden;
+           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+       }
+
+       th {
+           background: #1c7321;
+           color: white;
+           padding: 15px;
+           text-align: left;
+           font-weight: 600;
+       }
+
+       td {
+           padding: 12px 15px;
+           border-bottom: 1px solid #eee;
+       }
+
+       tr:hover {
+           background: #f8f9fa;
+       }
+
+       .block-info {
+           background: #f0f7ff;
+           padding: 15px;
+           border-radius: 8px;
+           margin: 15px 0;
+           border-left: 4px solid #1A96E2;
+       }
+
+       .block-info h4 {
+           color: #1A96E2;
+           margin-top: 0;
+       }
+
+       .block-info ul {
+           margin: 10px 0;
+       }
+
+       .syntax-example {
+           background: #fff9e6;
+           padding: 20px;
+           border-radius: 8px;
+           margin: 15px 0;
+           border-left: 4px solid #ffa500;
+       }
+
+       .syntax-example h4 {
+           color: #b36d00;
+           margin-top: 0;
+       }
+
+       .note {
+           background: #fff3cd;
+           padding: 15px;
+           border-radius: 8px;
+           margin: 15px 0;
+           border-left: 4px solid #ffc107;
+       }
+
+       .note p {
+           margin: 0;
+           color: #856404;
+       }
+
+       .warning {
+           background: #f8d7da;
+           padding: 15px;
+           border-radius: 8px;
+           margin: 15px 0;
+           border-left: 4px solid #dc3545;
+       }
+
+       .warning p {
+           margin: 0;
+           color: #721c24;
+       }
+
+       footer {
+           background: #2c3e50;
+           color: white;
+           text-align: center;
+           padding: 20px;
+           margin-top: 40px;
+       }
+
+       footer a {
+           color: #1A96E2;
+           text-decoration: none;
+       }
+
+       footer a:hover {
+           text-decoration: underline;
+       }
+
+       .category-grid {
+           display: grid;
+           grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+           gap: 20px;
+           margin: 20px 0;
+       }
+
+       .category-card {
+           background: #f8f9fa;
+           padding: 20px;
+           border-radius: 8px;
+           border: 1px solid #eee;
+       }
+
+       .category-card h3 {
+           margin-top: 0;
+           color: #1c7321;
+       }
+
+       .category-card ul {
+           margin: 10px 0;
+           padding-left: 20px;
+       }
+
+       .category-card li {
+           margin-bottom: 5px;
+       }
+
+       .param-list {
+           background: #f5f5f5;
+           padding: 15px;
+           border-radius: 8px;
+           margin: 10px 0;
+       }
+
+       .param-list h5 {
+           margin: 0 0 10px 0;
+           color: #333;
+       }
+
+       .param-list li {
+           margin-bottom: 5px;
+           color: #555;
+       }
+
+       .preview-box {
+           border: 1px dashed #ddd;
+           padding: 20px;
+           border-radius: 8px;
+           background: #fcfcfc;
+           margin: 10px 0;
+       }
+
+       @media (max-width: 768px) {
+           .content {
+               padding: 20px;
+           }
+           
+           header h1 {
+               font-size: 2em;
+           }
+           
+           header {
+               padding: 30px 20px;
+           }
+       }
+   </style>
+</head>
+<body>
+   <div class="container">
+       <header>
+           <h1>🐱 WitCatMarkDown 扩展文档</h1>
+           <p>为 Scratch TurboWarp 打造的强大 Markdown 渲染器</p>
+       </header>
+
+       <div class="content">
+           <!-- 简介 -->
+           <section>
+               <h2>📖 简介</h2>
+               <p><strong>WitCatMarkDown</strong> 是由白猫原在 CCW 平台开发的 Markdown 渲染扩展，基于改造合并适配 02engine(turbowarp)引擎。它支持部分Markdown 语法，提供了一些功能：</p>
+               <ul>
+                   <li> <strong>部分 Markdown 支持</strong>：标题、列表、代码块、表格、链接、图片等</li>
+                   <li> <strong>丰富的扩展语法</strong>：颜色、背景、大小、居中、自定义标签、触发器按钮等</li>
+                   <li> <strong>交互式编辑器</strong>：内置 Markdown 编辑面板，支持文件管理、实时预览</li>
+                   <li> <strong>自定义解析规则</strong>：可添加、导入/导出、管理正则替换规则</li>
+                   <li> <strong>样式与动画</strong>：支持元素变换、过渡动画、字体加载等</li>
+                   <li> <strong>数学符号优化</strong>：自动美化数学符号（π、√、≠等）</li>
+               </ul>
+           </section>
+
+          
+           <!-- 积木分类说明 -->
+           <section>
+               <h2>🧩 积木分类说明</h2>
+               <p>本扩展包含 41 个积木，按功能分为以下类别：</p>
+
+               <div class="category-grid">
+                   <div class="category-card">
+                       <h3>🎯 触发器相关</h3>
+                       <ul>
+                           <li><code>当触发器 ID [ID] 被点击</code> - 帽子积木，检测触发器按钮点击</li>
+                           <li><code>自定义ID 为 [ID] 的互交按钮外观html为 [HTML]</code> - 动态设置触发器按钮的 HTML 内容</li>
+                       </ul>
+                   </div>
+
+                   <div class="category-card">
+                       <h3>📝 编辑器面板</h3>
+                       <ul>
+                           <li><code>打开 markdown 编辑器面板</code> - 显示内置的 Markdown 编辑器</li>
+                           <li><code>打开自定义规则管理面板</code> - 管理解析规则和顺序</li>
+                       </ul>
+                   </div>
+
+                   <div class="category-card">
+                       <h3>📁 文件管理</h3>
+                       <ul>
+                           <li><code>导入所有文件 [json]</code> - 批量导入文件系统</li>
+                           <li><code>导出所有文件(JSON)</code> - 导出当前文件系统为 JSON</li>
+                       </ul>
+                   </div>
+
+                   <div class="category-card">
+                       <h3>🎬 创建与控制</h3>
+                       <ul>
+                           <li><code>创建 markdown ID[id] X[x] Y[y] 宽[width] 高[height] 内容[text]</code> - 创建渲染区域</li>
+                           <li><code>创建 markdown ID[id] X[x] Y[y] 宽[width] 高[height] 从文件[filename]</code> - 从文件创建</li>
+                           <li>注意这个只是文件测试缓存,保存后丢失</li>
+                           <li><code>设置 markdown ID[id]的[type]为[text]</code> - 修改位置、大小或内容</li>
+                           <li><code>删除 markdown ID[id]</code> - 删除指定区域</li>
+                           <li><code>删除所有 markdown</code> - 清空所有区域</li>
+                       </ul>
+                   </div>
+
+                   <div class="category-card">
+                       <h3>🔧 自定义规则</h3>
+                       <ul>
+                           <li><code>添加自定义规则 匹配[match] 替换为[replace]</code> - 添加正则替换规则</li>
+                           <li><code>清空自定义规则</code> - 删除所有自定义规则</li>
+                           <li><code>导入自定义解析式集json为 [JSON]</code> - 批量导入规则（新）</li>
+                           <li><code>导入自定义解析式集网址为 [URL]</code> - 从 URL 导入规则（新）</li>
+                       </ul>
+                   </div>
+
+                   <div class="category-card">
+                       <h3>🎨 样式设置</h3>
+                       <ul>
+                           <li><code>设置 markdown ID[id]第[num]个[type]的样式为[text]</code> - 应用 CSS 样式</li>
+                           <li><code>markdown ID[id]的第[num]张图片的宽[width]高[height]</code> - 设置图片尺寸</li>
+                           <li><code>设置 markdown ID[id]第[num]个代码框的高亮为[name]</code> - 设置代码语言</li>
+                           <li><code>设置 markdown ID[id]的字体为[name]</code> - 设置字体</li>
+                           <li><code>从[text]加载字体名[name]</code> - 加载自定义字体</li>
+                       </ul>
+                   </div>
+
+                   <div class="category-card">
+                       <h3>🎭 动画与变换</h3>
+                       <ul>
+                           <li><code>markdown[id]第[number]个[type]元素偏移X[x]Y[y]</code> - 2D 平移</li>
+                           <li><code>markdown[id]第[number]个[type]元素缩放X[x]Y[y]</code> - 缩放变换</li>
+                           <li><code>markdown[id]第[number]个[type]元素旋转[y]</code> - 2D 旋转</li>
+                           <li><code>markdown[id]第[number]个[type]元素3D偏移X[x]Y[y]Z[z]</code> - 3D 平移</li>
+                           <li><code>markdown[id]第[number]个[type]元素3D旋转X[x]Y[y]Z[z]</code> - 3D 旋转</li>
+                           <li><code>为markdown[id]设置过渡为[s]秒的[timing]</code> - 设置过渡动画</li>
+                       </ul>
+                   </div>
+
+                   <div class="category-card">
+                       <h3>👆 交互检测</h3>
+                       <ul>
+                           <li><code>上次点击的元素的[clickmenu]</code> - 获取点击信息</li>
+                           <li><code>碰到的元素的[clickmenu]</code> - 获取鼠标悬停信息</li>
+                           <li><code>markdown[id]第[number]个[type]元素?</code> - 布尔值，检测是否接触</li>
+                       </ul>
+                   </div>
+
+                   <div class="category-card">
+                       <h3>📊 全局设置</h3>
+                       <ul>
+                           <li><code>markdown大小自适应[enable]</code> - 开启/关闭自适应</li>
+                           <li><code>表格自动缩放[enable]</code> - 控制表格响应式行为</li>
+                           <li><code>设置自动换行为[enable]</code> - 控制自动换行</li>
+                           <li><code>设置数学符号优化为[enable]</code> - 开启数学符号美化</li>
+                       </ul>
+                   </div>
+
+                   <div class="category-card">
+                       <h3>📦 辅助积木</h3>
+                       <ul>
+                           <li><code>markdown ID[id]的[type]</code> - 获取属性值（X, Y, 宽, 高等）</li>
+                           <li><code>获取内容[content]的渲染[type]</code> - 测量内容尺寸</li>
+                           <li><code>📖示例内容</code> - 返回完整的示例 Markdown</li>
+                           <li><code>📖拓展教程</code> - 按钮，打开官方教程</li>
+                       </ul>
+                   </div>
+               </div>
+           </section>
+
+           <!-- 积木详细参数 -->
+           <section>
+               <h2>🔍 关键积木详细说明</h2>
+
+               <h3>触发器按钮</h3>
+               <div class="block-info">
+                   <h4>使用方法</h4>
+                   <p>在 Markdown 内容中添加触发器语法：</p>
+                   <pre><code>{trigger=0.5}[按钮文本](myEventID)</code></pre>
+                   <p>参数说明：</p>
+                   <ul>
+                       <li><code>0.5</code> - 冷却时间（秒），防止重复触发</li>
+                       <li><code>按钮文本</code> - 按钮显示的内容（可包含 HTML）</li>
+                       <li><code>myEventID</code> - 触发器 ID，用于匹配"当触发器 ID [ID] 被点击"积木</li>
+                   </ul>
+                   <p>示例代码块：</p>
+                   <pre><code>{trigger=1}[点击我](button1)</code></pre>
+                   <p>然后在 Scratch 中使用：</p>
+                   <pre><code>当触发器 ID [button1] 被点击
+自定义ID 为 [button1] 的互交按钮外观html为 [&lt;b&gt;已点击!&lt;/b&gt;]</code></pre>
+               </div>
+
+               <h3>自定义规则管理</h3>
+               <div class="block-info">
+                   <h4>功能说明</h4>
+                   <p>自定义规则允许你通过正则表达式动态替换 Markdown 内容，实现自定义语法。</p>
+                   
+                   <h4>积木清单</h4>
+                   <ul>
+                       <li><code>添加自定义规则 匹配[match] 替换为[replace]</code>
+                           <ul>
+                               <li><strong>match</strong>: 正则表达式字符串（如 <code>\\[myTag\\](.*?)\\[/myTag\\]</code>）</li>
+                               <li><strong>replace</strong>: 替换内容（如 <code>&lt;span style="color:red"&gt;$1&lt;/span&gt;</code>）</li>
+                           </ul>
+                       </li>
+                       <li><code>清空自定义规则</code> - 删除所有规则</li>
+                       <li><code>导入自定义解析式集json为 [JSON]</code> - 从 JSON 字符串批量导入
+                           <div class="param-list">
+                               <h5>JSON 格式：</h5>
+                               <pre><code>[
+ {"match": "\\\\[foo\\\\](.*?)\\\\[/foo\\\\]", "replace": "&lt;b&gt;$1&lt;/b&gt;"},
+ {"match": "bar", "replace": "baz"}
+]</code></pre>
+                           </div>
+                       </li>
+                       <li><code>导入自定义解析式集网址为 [URL]</code> - 从网络 URL 加载规则（返回 JSON 数组）</li>
+                   </ul>
+
+                   <h4>解析顺序管理</h4>
+                   <p>使用"打开自定义规则管理面板"积木可调出可视化界面：</p>
+                   <ul>
+                       <li>拖放调整解析管线中各步骤的顺序</li>
+                       <li>勾选/取消勾选启用或禁用某个步骤</li>
+                       <li>添加、搜索、删除自定义规则</li>
+                       <li>导入/导出规则 JSON 文件</li>
+                       <li>实时测试规则效果</li>
+                   </ul>
+               </div>
+
+               <h3>创建与定位</h3>
+               <div class="block-info">
+                   <h4>坐标系统</h4>
+                   <p>所有位置和大小的单位均为 Scratch 舞台坐标系（像素），范围：</p>
+                   <ul>
+                       <li>X: 0 ~ 舞台宽度</li>
+                       <li>Y: 0 ~ 舞台高度</li>
+                   </ul>
+                   <p>超出范围的值会被自动限制。</p>
+
+                   <h4>创建积木</h4>
+                   <pre><code>创建 markdown ID[id] X[x] Y[y] 宽[width] 高[height] 内容[text]</code></pre>
+                   <p><strong>ID</strong> 是区域的唯一标识符，后续所有操作都依赖此 ID。</p>
+
+                   <h4>从文件创建</h4>
+                   <pre><code>创建 markdown ID[id] X[x] Y[y] 宽[width] 高[height] 从文件[filename]</code></pre>
+                   <p>从内置文件系统加载内容。需先使用编辑器面板创建并保存文件。</p>
+               </div>
+
+               <h3>元素选择与变换</h3>
+               <div class="block-info">
+                   <h4>元素选择语法</h4>
+                   <p>许多积木需要指定"第[num]个[type]"，其中：</p>
+                   <ul>
+                       <li><strong>num</strong>: 元素序号（从 1 开始）</li>
+                       <li><strong>type</strong>: HTML 标签名，如 <code>p</code>, <code>img</code>, <code>code</code>, <code>table</code>, <code>a</code> 等</li>
+                   </ul>
+                   <p>示例：<code>markdown[myText]第[1]个[img]元素缩放X[2]Y[2]</code> 将第一个图片放大 2 倍。</p>
+
+                   <h4>变换积木</h4>
+                   <ul>
+                       <li><strong>偏移</strong>: 在原始位置基础上移动</li>
+                       <li><strong>缩放</strong>: 设置 scale(X, Y)，1 为原始大小</li>
+                       <li><strong>旋转</strong>: rotate(deg)，顺时针角度</li>
+                       <li><strong>3D 变换</strong>: 使用 translate3d 和 rotateX/Y/Z</li>
+                   </ul>
+                   <p>所有变换会自动应用过渡动画（如果设置了过渡时间）。</p>
+               </div>
+           </section>
+
+           <!-- 完整语法参考 -->
+           <section>
+               <h2>📚 完整语法参考</h2>
+
+               <h3>基础 Markdown 语法</h3>
+               <table>
+                   <thead>
+                       <tr>
+                           <th>语法</th>
+                           <th>说明</th>
+                           <th>示例</th>
+                       </tr>
+                   </thead>
+                   <tbody>
+                       <tr>
+                           <td><code># 标题</code></td>
+                           <td>1-6 级标题</td>
+                           <td><code># H1, ## H2, ### H3</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>**粗体**</code> 或 <code>__粗体__</code></td>
+                           <td>加粗文本</td>
+                           <td><code>**重要**</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>*斜体*</code></td>
+                           <td>斜体文本</td>
+                           <td><code>*强调*</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>-删除线-</code></td>
+                           <td>删除线</td>
+                           <td><code>-错误文本-</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>_下划线_</code></td>
+                           <td>下划线</td>
+                           <td><code>_下划线_</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>==高亮==</code></td>
+                           <td>黄色高亮</td>
+                           <td><code>==关键信息==</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>^上标^</code></td>
+                           <td>上标文本</td>
+                           <td><code>x^2^</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>~下标~</code></td>
+                           <td>下标文本</td>
+                           <td><code>H~2~O</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>[文本](url)</code></td>
+                           <td>超链接</td>
+                           <td><code>[CCW](https://www.ccw.site)</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>![alt](url)</code></td>
+                           <td>图片</td>
+                           <td><code>![logo](https://example.com/logo.png)</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>```代码```</code></td>
+                           <td>代码块</td>
+                           <td><pre><code>```python
+print("hello")
+```</code></pre></td>
+                       </tr>
+                       <tr>
+                           <td><code>&gt; 引用</code></td>
+                           <td>引用块</td>
+                           <td><code>&gt; 这是引用</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>- 列表项</code></td>
+                           <td>无序列表</td>
+                           <td><code>- 项目1<br>- 项目2</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>1. 列表项</code></td>
+                           <td>有序列表</td>
+                           <td><code>1. 第一项<br>2. 第二项</code></td>
+                       </tr>
+                       <tr>
+                           <td><code>| 表头 | 表头 |</code></td>
+                           <td>表格</td>
+                           <td><pre><code>| 姓名 | 年龄 |
+|------|------|
+| 张三 | 25 |
+注意：不支持合并单元
+</code></pre></td>
+                       </tr>
+                       <tr>
+                           <td><code>***</code></td>
+                           <td>分割线</td>
+                           <td><code>***</code></td>
+                       </tr>
+                       <tr>
+                           <td>行末两个空格</td>
+                           <td>强制换行</td>
+                           <td><code>第一行··<br>第二行</code>（·表示空格）</td>
+                       </tr>
+                   </tbody>
+               </table>
+
+               <h3>扩展 HTML 语法</h3>
+               <div class="syntax-example">
+                   <h4>[html] 块</h4>
+                   <p>直接嵌入原生 HTML，支持 JavaScript 事件：</p>
+                   <pre><code>[html]
+&lt;div style="background:#eee;padding:10px"&gt;
+ &lt;button onclick="alert('test')"&gt;点击我&lt;/button&gt;
+&lt;/div&gt;
+[/html]</code></pre>
+               </div>
+
+               <div class="syntax-example">
+                   <h4>颜色与样式标签</h4>
+                   <pre><code>[color=red]红色文字[/color]
+[color=#00cc00]绿色文字[/color]
+[bg=yellow]黄色背景[/bg]
+[size=20px]大号文字[/size]
+[center]居中内容[/center]</code></pre>
+               </div>
+
+               <div class="syntax-example">
+                   <h4>自定义标签</h4>
+                   <p>自动添加 <code>WitCatTag-标签名</code> 的 class：</p>
+                   <pre><code>[warning]警告内容[/warning]
+[note]注释内容[/note]
+[tip]提示内容[/tip]</code></pre>
+                   <p>需要配合 CSS 样式使用。</p>
+               </div>
+
+               <div class="syntax-example">
+                   <h4>触发器按钮</h4>
+                   <pre><code>{trigger=0.5}[点击触发](buttonID)</code></pre>
+                   <p><code>0.5</code> 是冷却时间（秒），<code>buttonID</code> 是触发器 ID。</p>
+               </div>
+
+               <div class="syntax-example">
+ 
+
+               <h3>数学符号美化（废物）</h3>
+               <p>当启用"数学符号优化"后，以下文本会自动转换：</p>
+               <table>
+                   <thead>
+                       <tr>
+                           <th>原始文本</th>
+                           <th>转换后</th>
+                       </tr>
+                   </thead>
+                   <tbody>
+                       <tr><td><code>pi</code></td><td>π</td></tr>
+                       <tr><td><code>theta</code></td><td>θ</td></tr>
+                       <tr><td><code>alpha, beta, gamma...</code></td><td>α, β, γ...</td></tr>
+                       <tr><td><code>sqrt(2)</code></td><td>√(2)</td></tr>
+                       <tr><td><code>a!=b</code></td><td>a≠b</td></tr>
+                       <tr><td><code>a&gt;=b</code></td><td>a≥b</td></tr>
+                       <tr><td><code>a&lt;=b</code></td><td>a≤b</td></tr>
+                       <tr><td><code>x^2</code></td><td>x²</td></tr>
+                       <tr><td><code>1/2</code></td><td>1÷2</td></tr>
+                       <tr><td><code>a*b*c</code></td><td>a×b×c</td></tr>
+                       <tr><td><code>+/-</code></td><td>±</td></tr>
+                   </tbody>
+               </table>
+           </section>
+
+           <!-- 使用示例 -->
+           <section>
+               <h2>💡 使用示例</h2>
+
+               <h3>示例 1：带样式的文本块</h3>
+               <div class="syntax-example">
+                   <h4>Markdown 内容</h4>
+                   <pre><code># 欢迎来到我的项目
+
+[color=#1A96E2]这是蓝色文字[/color]，[bg=yellow]这是高亮背景[/bg]。
+
+[center]**居中的标题**[/center]
+
+{trigger=0.5}[点击这里开始游戏](startGame)
+
+## 特性列表
+
+- [x] **完成** 基础功能
+- [ ] 待优化性能
+- [x] 添加动画效果
+
+&gt; **提示**: 按触发器按钮开始体验！</code></pre>
+               </div>
+
+            
+
+               <h3>示例 2：代码展示</h3>
+               <div class="syntax-example">
+                   <h4>Markdown 内容</h4>
+                   <pre><code>```javascript
+// 计算斐波那契数列
+function fibonacci(n) {
+   if (n <= 1) return n;
+   return fibonacci(n-1) + fibonacci(n-2);
+}
+console.log(fibonacci(10)); // 55
+```</code></pre>
+                   <p>渲染后会自动添加"复制"按钮，方便用户复制代码。</p>
+               </div>
+
+               <h3>示例 3：自定义规则应用</h3>
+               <div class="syntax-example">
+                   <h4>目标</h4>
+                   <p>将 <code>[warning]危险操作[/warning]</code> 转换为红色警告框。</p>
+                   
+                   <h4>步骤</h4>
+                   <ol>
+                       <li>使用积木添加规则：
+                           <pre><code>添加自定义规则 匹配[\[warning\](.*?)\[/warning\]] 替换为[
+&lt;div class="WitCatTag-warning" style="color:red;font-weight:bold"&gt;
+ ⚠️ $1
+&lt;/div&gt;]</code></pre>
+                       </li>
+                       <li>在 Markdown 中使用：
+                           <pre><code>[warning]请勿删除系统文件！[/warning]</code></pre>
+                       </li>
+                   </ol>
+               </div>
+           </section>
+
+           <!-- 注意事项 -->
+           <section>
+               <h2>⚠️ 注意事项</h2>
+               
+               <div class="warning">
+                   <h4>性能与兼容性</h4>
+                   <ul>
+                       <li>大量复杂的自定义规则会影响渲染性能，建议保持规则数量在 50 条以内</li>
+                       <li>频繁触发的动画（如每帧变换）可能导致卡顿，使用过渡动画更流畅</li>
+                       <li>数学符号美化会遍历所有文本节点，对超大文本可能产生性能影响</li>
+                       <li>表格自动缩放功能在窗口大小频繁变化时可能触发重排，建议在稳定后使用</li>
+                   </ul>
+               </div>
+
+               <div class="note">
+                   <h4>安全限制</h4>
+                   <ul>
+                       <li>HTML 块中的 JavaScript 代码运行在浏览器环境中，无法直接访问 Scratch 变量</li>
+                       <li>字体加载仅允许来自 <code>https://m.ccw.site</code>, <code>https://m.xiguacity</code>, <code>https://static.xiguacity</code> 的字体文件</li>
+                       <li>从 URL 导入规则时，确保目标域支持 CORS，否则 fetch 会失败</li>
+                   </ul>
+               </div>
+
+               <div class="note">
+                   <h4>ID 管理</h4>
+                   <ul>
+                       <li>每个 markdown 区域的 ID 必须唯一，否则新创建的区域会替换旧的</li>
+                       <li>ID 可以是任意字符串，建议使用有意义的名称（如 <code>mainText</code>, <code>statusPanel</code>）</li>
+                       <li>删除区域后，相关变换和样式设置会自动清除</li>
+                   </ul>
+               </div>
+
+               <div class="note">
+                   <h4>编辑器面板特性</h4>
+                   <ul>
+                       <li>支持拖拽本地图片到编辑器，自动转换为 Base64 嵌入</li>
+                       <li>支持粘贴剪贴板中的图片（如截图）</li>
+                       <li>文件列表支持重命名、删除、导入/导出</li>
+                       <li>实时预览与编辑区同步滚动</li>
+                   </ul>
+               </div>
+           </section>
+
+                     <section>
+               <h2>📋 API 速查表</h2>
+               
+               <h3>积木类型统计</h3>
+               <table>
+                   <thead>
+                       <tr>
+                           <th>类型</th>
+                           <th>数量</th>
+                           <th>说明</th>
+                       </tr>
+                   </thead>
+                   <tbody>
+                       <tr><td>帽子积木 (Hat)</td><td>1</td><td>事件触发</td></tr>
+                       <tr><td>命令积木 (Command)</td><td>35</td><td>执行操作</td></tr>
+                       <tr><td>报告积木 (Reporter)</td><td>4</td><td>返回值</td></tr>
+                       <tr><td>布尔积木 (Boolean)</td><td>1</td><td>返回 true/false</td></tr>
+                       <tr><td>按钮积木 (Button)</td><td>2</td><td>打开链接</td></tr>
+                   </tbody>
+               </table>
+
+
+           </section>
+
+               
+       <footer>
+           <p> 作者: 白猫 @ CCW 平台</p>
+           <p>网址: <a href="https://www.ccw.site/student/6173f57f48cf8f4796fc860e" target="_blank">作者主页</a></p>
+           <p> 官方教程: <a href="https://www.ccw.site/post/7d129e01-e30a-4d88-92d2-320b555ed0f5" target="_blank">教程 1（原扩展自带但不是markdown文档）</a> | <a href="https://learn.ccw.site/article/96ade444-d0e9-4066-8541-eb17d3257f14" target="_blank">教程 2</a></p>
+       </footer>
+   </div>
+</body>
+</html>
+	

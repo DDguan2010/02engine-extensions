@@ -10,7 +10,6 @@
   /* eslint-disable */
   
   // 工具函数：防抖 (Debounce)
-  // 用于优化高频触发的事件，如输入、滚动、窗口调整
   function _debounce(func, wait) {
     let timeout;
     return function(...args) {
@@ -21,7 +20,6 @@
   }
 
   // 工具函数：节流 (Throttle)
-  // 用于限制MutationObserver等极其频繁的回调
   function _throttle(func, limit) {
     let inThrottle;
     return function() {
@@ -111,7 +109,6 @@
       return md.toTree(source);
     };
      
-    // 预处理优化：正则对象缓存化，避免每次调用重复编译
     const regexProtectHtml = /\[html\]([\s\S]*?)\[\/html\]/gi;
     const regexRowspan = /\^\^/g;
     const regexHighlight = /==([\s\S]+?)==/g;
@@ -1993,6 +1990,22 @@
             text: '清空自定义规则',
           },
           {
+            opcode: 'importCustomRulesJSON',
+            blockType: Scratch.BlockType.COMMAND,
+            text: '导入自定义解析式集json为 [JSON]',
+            arguments: {
+              JSON: { type: Scratch.ArgumentType.STRING, defaultValue: '[{"match":"foo","replace":"bar"}]' }
+            }
+          },
+          {
+            opcode: 'importCustomRulesURL',
+            blockType: Scratch.BlockType.COMMAND,
+            text: '导入自定义解析式集网址为 [URL]',
+            arguments: {
+              URL: { type: Scratch.ArgumentType.STRING, defaultValue: 'https://example.com/rules.json' }
+            }
+          },
+          {
             opcode: 'sets',
             blockType: Scratch.BlockType.COMMAND,
             text: '设置 markdown ID[id]第[num]个[type]的样式为[text]',
@@ -3866,6 +3879,44 @@
        this.markdownExpose.customRules = [];
     }
 
+    importCustomRulesJSON(args) {
+        try {
+            const data = JSON.parse(args.JSON);
+            if (Array.isArray(data)) {
+                let count = 0;
+                data.forEach(item => {
+                    if (item.match && item.replace) {
+                        this.addCustomRule({ match: item.match, replace: item.replace });
+                        count++;
+                    }
+                });
+                console.log(`Imported ${count} rules from JSON.`);
+            }
+        } catch (e) {
+            console.error('Failed to import rules from JSON:', e);
+        }
+    }
+
+    importCustomRulesURL(args) {
+        return fetch(args.URL)
+            .then(response => response.json())
+            .then(data => {
+                if (Array.isArray(data)) {
+                    let count = 0;
+                    data.forEach(item => {
+                        if (item.match && item.replace) {
+                            this.addCustomRule({ match: item.match, replace: item.replace });
+                            count++;
+                        }
+                    });
+                    console.log(`Imported ${count} rules from URL.`);
+                }
+            })
+            .catch(e => {
+                console.error('Failed to import rules from URL:', e);
+            });
+    }
+
     sets(args) {
       const search = document.getElementById(`WitCatMarkDown${args.id}`);
       if (!search || Number(args.num) <= 0) return;
@@ -4275,17 +4326,9 @@
 
 这是首次使用 **Markdown 拓展** 自动生成的内容，包含 Markdown 语法和拓展介绍
 
-## HTML 原生代码块 (新增)
-[html]
-<div style="background:#eee;padding:10px;border-radius:5px;">
-  <button onclick="alert('Hello from WitCatMarkDown!')" style="padding:5px 10px;cursor:pointer;">点击测试 JS</button>
-  <span style="color:red;font-weight:bold;margin-left:10px;">这是原生 HTML 渲染！</span>
-</div>
-[/html]
-
 ## 文本样式
 
-加粗|**加粗1** __加粗2__  
+加粗|**加粗1** __加粗2__ （两个下划线） 
 斜体|*斜体1*
 下划线|_下划线_
 ***
@@ -4293,13 +4336,6 @@
 就像这样  
 需要换行的话，需要在一行末尾加上两个空格  
 就像这样
-
-## 自定义解析 (新增)
-
-- 颜色: [color=red]红色文字[/color] [color=#00cc00]Hex颜色[/color]
-- 背景: [bg=yellow]高亮背景[/bg]
-- 大小: [size=20px]大号文字[/size]
-- 居中: [center]居中文字[/center]
 
 ## 引用
 
@@ -4311,11 +4347,6 @@
 
 [ccw 官网](https://www.ccw.site)
 
-## 交互触发器 (新增)
-
-{trigger=0.5}[点击这里触发事件](myEvent)
-
-*点击上方按钮，可以触发【当触发器 ID [myEvent] 被点击】积木*
 
 ## 图片
 
@@ -4395,6 +4426,26 @@ print("hello fenced code")
 
 - 删除线：-文字-
 - 简单标签：[warning]警告内容[/warning]  [note]注释内容[/note]  [tip]提示内容[/tip]
+
+## 交互触发器 
+
+{trigger=0.5}[点击这里触发事件](myEvent)
+
+*点击上方按钮，可以触发【当触发器 ID [myEvent] 被点击】积木*
+## 自定义解析 
+
+- 颜色: [color=red]红色文字[/color] [color=#00cc00]Hex颜色[/color]
+- 背景: [bg=yellow]高亮背景[/bg]
+- 大小: [size=20px]大号文字[/size]
+- 居中: [center]居中文字[/center]
+
+## HTML 原生代码块 (危险)
+[html]
+<div style="background:#eee;padding:10px;border-radius:5px;">
+  <button onclick="alert('Hello from WitCatMarkDown!')" style="padding:5px 10px;cursor:pointer;">点击测试 JS</button>
+  <span style="color:red;font-weight:bold;margin-left:10px;">这是原生 HTML 渲染！</span>
+</div>
+[/html]
 
 `;
     }
