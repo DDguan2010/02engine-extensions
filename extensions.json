@@ -770,6 +770,22 @@
           "samples": [
             "GitHub面板"
           ]
+        },
+        {
+            "slug": "让变量列表换行",
+            "id": "让变量列表换行",
+            "name": "让变量列表换行",
+            "description": "让变量列表换行的工具": {
+                "zh-cn": "一个工具随用随撇",
+            },
+            "image": "让变量列表换行.jpg",
+            "by": [
+                {
+                    "name": "yuan",
+                    "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
+                }
+            ],
+            "docs": false
         }
     ]
 }
