@@ -753,7 +753,24 @@
             "samples": [
                 "拼音转文字"
             ]
-        } 
+        },
+        {
+          "slug": "GitHub面板",
+          "id": "GitHub面板",
+          "name": "GitHub面板",
+          "description": "github面板。",
+          "image": "GitHub面板.png",
+          "by": [
+            {
+              "name": "yuan",
+              "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
+            }
+          ],
+          "docs": true,
+          "samples": [
+            "GitHub面板"
+          ]
+        }
     ]
 }
 
