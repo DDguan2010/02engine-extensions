@@ -786,7 +786,27 @@
                 }
             ],
             "docs": false
-        }
+        },
+        {
+            "slug": "寻路",
+            "id": "寻路",
+            "name": "寻路",
+            "description": "训练.",
+            "nameTranslations": {
+                "zh-cn": "寻路"
+            },
+            "image": "寻路.png",
+            "by": [
+                {
+                "name": "yuan",
+                "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
+                }
+            ],
+            "docs": true,
+            "samples": [
+                "寻路"
+            ]
+        },
     ]
 }
 
