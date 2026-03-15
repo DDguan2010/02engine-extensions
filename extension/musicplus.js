@@ -396,7 +396,7 @@ class musicplusExtension {
                     text: '演奏音符 [NOTE] [BEATS] 拍',
                     arguments: {
                         NOTE: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 60,
                             menu: 'noteMenu'
                         },
@@ -498,9 +498,8 @@ class musicplusExtension {
                     text: '演奏 MIDI [ROOT] [CHORD] 和弦 [BEATS] 拍',
                     arguments: {
                         ROOT: {
-                            type: Scratch.ArgumentType.NUMBER,
-                            defaultValue: 60,
-                            menu: 'noteMenu'
+                            type: Scratch.ArgumentType.NOTE,
+                            defaultValue: 60
                         },
                         CHORD: {
                             type: Scratch.ArgumentType.STRING,
@@ -519,7 +518,7 @@ class musicplusExtension {
                     text: '[ROOT] [CHORD] 和弦音符',
                     arguments: {
                         ROOT: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 60
                         },
                         CHORD: {
@@ -550,7 +549,7 @@ class musicplusExtension {
                     text: '[ROOT] [SCALE] 音阶音符',
                     arguments: {
                         ROOT: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 60
                         },
                         SCALE: {
@@ -566,7 +565,7 @@ class musicplusExtension {
                     text: '演奏 [ROOT] [SCALE] 音阶 每个音符 [BEATS] 拍',
                     arguments: {
                         ROOT: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 60
                         },
                         SCALE: {
@@ -804,11 +803,11 @@ class musicplusExtension {
                     text: '从 [START_NOTE] 滑音到 [NOTE] 持续 [BEATS] 拍',
                     arguments: {
                         NOTE: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 60,
                         },
                         START_NOTE: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 55,
                         },
                         BEATS: {
@@ -823,11 +822,11 @@ class musicplusExtension {
                     text: '🎵 演奏倚音 [NOTE1] 到 [NOTE2] 时长共 [BEATS] 拍',
                     arguments: {
                         NOTE1: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 58
                         },
                         NOTE2: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 60
                         },
                         BEATS: {
@@ -842,7 +841,7 @@ class musicplusExtension {
                     text: '🎵 演奏跌音 [NOTE] 下滑 [SEMITONES] 半音 时长 [DURATION] 拍',
                     arguments: {
                         NOTE: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 72
                         },
                         SEMITONES: {
@@ -861,11 +860,11 @@ class musicplusExtension {
                     text: '🎵 演奏颤音 [NOTE] 交替 [ALT_NOTE] 速度 [SPEED] 时长 [DURATION] 拍',
                     arguments: {
                         NOTE: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 60
                         },
                         ALT_NOTE: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 62
                         },
                         SPEED: {
@@ -884,7 +883,7 @@ class musicplusExtension {
                     text: '琶音演奏 [ROOT] [CHORD] 总时长 [ARPLENGTH] 拍 每个音符 [BEATS] 拍',
                     arguments: {
                         ROOT: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 60,
                             menu: 'noteMenu'
                         },
@@ -975,11 +974,11 @@ class musicplusExtension {
                     text: '随机音符 [MIN] 到 [MAX]',
                     arguments: {
                         MIN: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 60
                         },
                         MAX: {
-                            type: Scratch.ArgumentType.NUMBER,
+                            type: Scratch.ArgumentType.NOTE,
                             defaultValue: 72
                         }
                     }
