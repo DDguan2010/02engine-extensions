@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="GitHub 面板 Pro+ 完整 API 参考文档，包含插件系统、插件集市、AI、缓存等全部功能的开发接口">
+    <meta name="author" content="GitHub Panel Pro+">
+    <meta name="version" content="1.0.0">
+    <title>GitHub 面板 Pro+ 完整 API 参考表</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #e6edf3;
+            background: #0d1117;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        /* 文档头部信息 */
+        .doc-header {
+            background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+        
+        .doc-title {
+            font-size: 2.8em;
+            margin-bottom: 10px;
+            color: #58a6ff;
+            font-weight: 700;
+        }
+        
+        .doc-meta {
+            color: #8b949e;
+            font-size: 0.95em;
+            margin-bottom: 15px;
+        }
+        
+        .doc-meta span {
+            margin-right: 20px;
+        }
+        
+        .doc-meta span::before {
+            content: "•";
+            margin-right: 8px;
+            color: #30363d;
+        }
+        
+        /* 如何使用本文档 */
+        .usage-guide {
+            background: rgba(88, 166, 255, 0.1);
+            border: 1px solid rgba(88, 166, 255, 0.3);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .usage-guide h3 {
+            color: #58a6ff;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        
+        .usage-guide ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .usage-guide li {
+            padding: 8px 0;
+            padding-left: 24px;
+            position: relative;
+        }
+        
+        .usage-guide li::before {
+            content: "➤";
+            position: absolute;
+            left: 0;
+            color: #58a6ff;
+            font-size: 0.8em;
+        }
+        
+        /* 警告框 */
+        .warning {
+            background: rgba(187, 128, 9, 0.15);
+            border: 1px solid #d29922;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .warning h3 {
+            color: #d29922;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        
+        .warning p {
+            color: #e6edf3;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+        
+        /* 目录导航 */
+        .toc {
+            background: #161b22;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        }
+        
+        .toc h2 {
+            color: #58a6ff;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .toc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        
+        .toc-section {
+            background: rgba(22, 27, 34, 0.5);
+            border-radius: 6px;
+            padding: 15px;
+            border: 1px solid #30363d;
+        }
+        
+        .toc-section h4 {
+            color: #7ee787;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .toc-section ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .toc-section li {
+            padding: 5px 0;
+        }
+        
+        .toc-section a {
+            color: #c9d1d9;
+            text-decoration: none;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            transition: color 0.2s;
+        }
+        
+        .toc-section a:hover {
+            color: #58a6ff;
+        }
+        
+        .toc-section a::before {
+            content: "▸";
+            margin-right: 8px;
+            color: #30363d;
+        }
+        
+        /* 主要章节 */
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .section h2 {
+            font-size: 1.8em;
+            color: #58a6ff;
+            margin-bottom: 20px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #30363d;
+        }
+        
+        .section h3 {
+            font-size: 1.4em;
+            color: #7ee787;
+            margin: 25px 0 15px 0;
+        }
+        
+        /* API 表格 */
+        .api-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background: #161b22;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        }
+        
+        .api-table th {
+            background: #21262d;
+            color: #58a6ff;
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        
+        .api-table td {
+            padding: 12px 15px;
+            border-top: 1px solid #30363d;
+            vertical-align: top;
+        }
+        
+        .api-table tr:hover {
+            background: rgba(88, 166, 255, 0.05);
+        }
+        
+        /* 代码样式 */
+        .method-name {
+            font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
+            font-weight: 600;
+            color: #7ee787;
+        }
+        
+        .param {
+            font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
+            color: #a5d6ff;
+            font-size: 0.9em;
+        }
+        
+        .return {
+            font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
+            color: #ffa657;
+            font-size: 0.9em;
+        }
+        
+        .description {
+            color: #c9d1d9;
+            font-size: 0.95em;
+        }
+        
+        /* 稳定性标签 */
+        .stability {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        
+        .stability.public {
+            background: rgba(46, 160, 67, 0.2);
+            color: #3fb950;
+        }
+        
+        .stability.private {
+            background: rgba(248, 81, 73, 0.2);
+            color: #f85149;
+        }
+        
+        /* 提示框 */
+        .note {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: rgba(88, 166, 255, 0.1);
+            border-left: 3px solid #58a6ff;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #8b949e;
+        }
+        
+        .tip {
+            background: rgba(46, 160, 67, 0.1);
+            border-left: 3px solid #3fb950;
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        .tip h4 {
+            color: #3fb950;
+            margin-bottom: 8px;
+        }
+        
+        .tip p {
+            color: #c9d1d9;
+            margin: 0;
+        }
+        
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .doc-title {
+                font-size: 2em;
+            }
+            
+            .toc-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .api-table {
+                font-size: 0.9em;
+            }
+            
+            .api-table th,
+            .api-table td {
+                padding: 10px 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 文档头部信息 -->
+        <div class="doc-header">
+            <h1 class="doc-title">GitHub 面板 Pro+ 完整 API 参考表</h1>
+            <div class="doc-meta">
+                <span>版本: 1.0.0</span>
+                <span>创建日期: 2024</span>
+                <span>文档格式: HTML</span>
+            </div>
+            <p class="subtitle">基于你贴出的最终扩展代码（含插件系统、集市、AI、缓存等全部功能的开发接口）</p>
+        </div>
+        
+        <!-- 如何使用本文档 -->
+        <div class="usage-guide">
+            <h3>📖 如何使用本文档</h3>
+            <ul>
+                <li><strong>插件开发者：</strong>重点关注 <a href="#section-plugin">第1部分 插件 API (ctx.*)</a>，这些是稳定接口</li>
+                <li><strong>扩展维护者：</strong>参考 <a href="#section-extension">第2部分 扩展内部 API</a> 了解私有方法实现</li>
+                <li><strong>快速导航：</strong>使用目录或 Ctrl+F 搜索方法名</li>
+                <li><strong>插件系统拥有完全权限（Token、网络请求、DOM 操作、仓库写入）。加载未知插件可能导致数据损坏或隐私泄露。加载插件时会弹出安全确认。</strong></li>
+            </ul>
+        </div>
+        
+	<div class="warning">
+            <h3>>⚠️ 安全警告</h3>
+            <p>插件系统拥有完全权限（Token、网络请求、DOM 操作、仓库写入）。加载未知插件可能导致数据损坏或隐私泄露。加载插件时会弹出安全确认。</p>
+<p>如果你继续进行下面行为与开发者无关</p>
+        </div>
+        <div class="warning">
+            <h3>基本格式</h3>
+            <p>plugin.id = "your.plugin.id";</p>
+	<p>plugin.name = "插件名称";</p>
+	<p>plugin.version = "1.0.0";</p>
+	
+	<p>plugin.author = "作者";           // 可选（默认 Unknown）</p>
+	<p>plugin.description = "介绍";      // 可选（默认空）</p>
+	<p>plugin.tags = ["tag1","tag2"];    // 可选（默认 []）</p>
+	<p>plugin.style = `...CSS...`;       // 可选（默认空）</p>
+
+	<p>plugin.init = (ctx) => { ... };   // 可选（默认空函数）</p>
+	<p>plugin.onHook = (hookName, data) => { ... }; // 可选（默认空函数）</p>
+        </div>
+        
+        <!-- 目录导航 -->
+        <div class="toc">
+            <h2>📑 目录导航</h2>
+            <div class="toc-grid">
+                <div class="toc-section">
+                    <h4>1. 插件 API (ctx.*)</h4>
+                    <ul>
+                        <li><a href="#section-plugin-core">1.1 核心状态</a></li>
+                        <li><a href="#section-plugin-api">1.2 GitHub API</a></li>
+                        <li><a href="#section-plugin-ai">1.3 AI 管理器</a></li>
+                        <li><a href="#section-plugin-cache">1.4 缓存管理器</a></li>
+                        <li><a href="#section-plugin-utils">1.5 UI 工具</a></li>
+                        <li><a href="#section-plugin-components">1.6 UI 组件工厂</a></li>
+                        <li><a href="#section-plugin-manager">1.7 插件管理器</a></li>
+                        <li><a href="#section-plugin-ui">1.8 UI 引用</a></li>
+                        <li><a href="#section-plugin-hooks">1.9 Hook 事件</a></li>
+                    </ul>
+                </div>
+                <div class="toc-section">
+                    <h4>2. 扩展内部 API</h4>
+                    <ul>
+                        <li><a href="#section-extension-lifecycle">2.1 扩展生命周期</a></li>
+                        <li><a href="#section-extension-ui">2.2 UI 控制</a></li>
+                        <li><a href="#section-extension-marketplace">2.3 插件集市</a></li>
+                        <li><a href="#section-extension-plugin">2.4 插件管理</a></li>
+                        <li><a href="#section-extension-search">2.5 搜索功能</a></li>
+                        <li><a href="#section-extension-browse">2.6 浏览操作</a></li>
+                        <li><a href="#section-extension-ai">2.7 AI 功能</a></li>
+                        <li><a href="#section-extension-github">2.8 GitHub 操作</a></li>
+                        <li><a href="#section-extension-user">2.9 用户管理</a></li>
+                        <li><a href="#section-extension-utils">2.10 工具方法</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 1. 插件 API (ctx.*) -->
+        <div class="section" id="section-plugin">
+            <h2>1. 插件 API (ctx.*) - 插件开发推荐调用</h2>
+            <p style="color: #8b949e; margin-bottom: 20px;">
+                插件通过 <code>plugin.init(ctx)</code> 和 <code>plugin.onHook</code> 接收此上下文对象。这些是插件开发时推荐使用的 API，相对稳定。
+            </p>
+            
+            <div class="tip">
+                <h4>💡 插件开发最佳实践</h4>
+                <p>在 plugin.init 中缓存 ctx: <code>plugin._ctx = ctx</code>，然后在 Hook 中使用。推荐监听 ui:ready 来扩展 UI。</p>
+            </div>
+            
+            <div class="category" id="section-plugin-core">
+                <h3>1.1 核心状态 (ctx.core)</h3>
+                <p>访问和修改面板核心状态（Token、AI 配置、当前仓库等）</p>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>字段/方法</th>
+                            <th>类型</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">core.token</td>
+                            <td class="param">string</td>
+                            <td class="description">GitHub Token（也用于 GitHub AI）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.aiProvider</td>
+                            <td class="param">'github' | 'siliconflow' | 'custom'</td>
+                            <td class="description">当前 AI 提供商</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.siliconKey</td>
+                            <td class="param">string</td>
+                            <td class="description">硅基流动 API Key</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.siliconModel</td>
+                            <td class="param">string</td>
+                            <td class="description">硅基流动模型</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.siliconParams</td>
+                            <td class="param">{temperature: number, maxTokens: number}</td>
+                            <td class="description">硅基流动参数</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.customAI</td>
+                            <td class="param">{url: string, key: string, model: string}</td>
+                            <td class="description">自定义 AI 配置</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.sfTranslateEnabled</td>
+                            <td class="param">boolean</td>
+                            <td class="description">硅基翻译开关</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.sfTranslateModel</td>
+                            <td class="param">string</td>
+                            <td class="description">硅基翻译模型</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.githubModel</td>
+                            <td class="param">string</td>
+                            <td class="description">GitHub AI 模型</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.currentOwner</td>
+                            <td class="param">string</td>
+                            <td class="description">当前仓库 Owner</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.currentRepo</td>
+                            <td class="param">string</td>
+                            <td class="description">当前仓库名</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.currentPath</td>
+                            <td class="param">string</td>
+                            <td class="description">当前目录路径</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.currentBranch</td>
+                            <td class="param">string</td>
+                            <td class="description">当前分支</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.defaultBranch</td>
+                            <td class="param">string</td>
+                            <td class="description">默认分支（默认 'main'）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.viewMode</td>
+                            <td class="param">string</td>
+                            <td class="description">当前视图模式（list/file/create）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.isEditMode</td>
+                            <td class="param">boolean</td>
+                            <td class="description">是否文件编辑模式</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.currentFileSha</td>
+                            <td class="param">string | null</td>
+                            <td class="description">当前文件 SHA</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.panelMode</td>
+                            <td class="param">'normal' | 'minimized' | 'fullscreen'</td>
+                            <td class="description">面板模式</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.mode</td>
+                            <td class="param">string</td>
+                            <td class="description">当前主 Tab（search/browse/ai/trending/my/plugins）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.searchDir</td>
+                            <td class="param">'repo' | 'user' | 'org'</td>
+                            <td class="description">搜索方向</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.isMarkdownPreview</td>
+                            <td class="param">boolean</td>
+                            <td class="description">Markdown 是否预览模式</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.marketplaceState</td>
+                            <td class="param">object</td>
+                            <td class="description">集市状态（owner/repo/branch/dir/items/lastLoadedAt）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.cacheManager</td>
+                            <td class="param">CacheManager</td>
+                            <td class="description">缓存管理器实例</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.apiManager</td>
+                            <td class="param">APIManager</td>
+                            <td class="description">API 管理器实例</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.aiManager</td>
+                            <td class="param">AIManager</td>
+                            <td class="description">AI 管理器实例</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.setToken</td>
+                            <td class="param">(token: string) => void</td>
+                            <td class="description">设置 Token 并更新 AI 配置</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.setAIProvider</td>
+                            <td class="param">(provider: string) => void</td>
+                            <td class="description">设置 AI 提供商</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.setSiliconKey</td>
+                            <td class="param">(key: string) => void</td>
+                            <td class="description">设置硅基 Key</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">core.setSiliconTranslator</td>
+                            <td class="param">(state: 'on' | 'off', model: string) => void</td>
+                            <td class="description">设置硅基翻译</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-plugin-api">
+                <h3>1.2 GitHub API (ctx.api)</h3>
+                <p>封装 GitHub REST API，自动处理 Token 和缓存</p>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">api.headers</td>
+                            <td class="param">（getter）</td>
+                            <td class="return">object</td>
+                            <td class="description">返回请求头（含 Authorization）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">api.fetchJson</td>
+                            <td class="param">url: string</td>
+                            <td class="return">Promise&lt;any&gt;</td>
+                            <td class="description">GET JSON，自动缓存 15s</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">api.fetchBlob</td>
+                            <td class="param">owner: string, repo: string, sha: string</td>
+                            <td class="return">Promise&lt;Blob&gt;</td>
+                            <td class="description">获取文件 Blob（二进制）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">api.putFile</td>
+                            <td class="param">owner, repo, path, content, message, branch, sha?</td>
+                            <td class="return">Promise&lt;any&gt;</td>
+                            <td class="description">创建/更新文件（content 需 base64）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">api.deleteFile</td>
+                            <td class="param">owner, repo, path, sha, branch, message</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">删除文件</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">api.triggerWorkflow</td>
+                            <td class="param">owner, repo, workflowId, branch</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">触发 GitHub Actions</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">api.mergeBranch</td>
+                            <td class="param">owner, repo, base, head, message</td>
+                            <td class="return">Promise&lt;Response&gt;</td>
+                            <td class="description">合并分支（返回原始 Response）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">api.forkRepo</td>
+                            <td class="param">owner, repo</td>
+                            <td class="return">Promise&lt;any&gt;</td>
+                            <td class="description">Fork 仓库</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">api.createPullRequest</td>
+                            <td class="param">owner, repo, title, head, base, bodyText</td>
+                            <td class="return">Promise&lt;any&gt;</td>
+                            <td class="description">创建 Pull Request</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-plugin-ai">
+                <h3>1.3 AI 管理器 (ctx.core.aiManager)</h3>
+                <p>AI 流式生成、翻译、仓库介绍</p>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">aiManager.abort</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">中止当前流式请求</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">aiManager.stream</td>
+                            <td class="param">messages: array, onChunk: function</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">启动流式对话</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">aiManager.translate</td>
+                            <td class="param">text: string, model: string</td>
+                            <td class="return">Promise&lt;string&gt;</td>
+                            <td class="description">硅基流动翻译（截断 3000 字符）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">aiManager.generateIntro</td>
+                            <td class="param">repoName, desc, model</td>
+                            <td class="return">Promise&lt;string&gt;</td>
+                            <td class="description">生成仓库中文介绍</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-plugin-cache">
+                <h3>1.4 缓存管理器 (ctx.core.cacheManager)</h3>
+                <p>API 缓存和 AI 仓库上下文缓存</p>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>字段/方法</th>
+                            <th>类型</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">cacheManager.repoTextCache</td>
+                            <td class="param">Map&lt;string, object&gt;</td>
+                            <td class="description">仓库文件内容缓存</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">cacheManager.repoCacheSelection</td>
+                            <td class="param">Set&lt;string&gt;</td>
+                            <td class="description">选中用于 AI 上下文的文件</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">cacheManager.repoCacheMeta</td>
+                            <td class="param">object</td>
+                            <td class="description">缓存元信息（owner/repo/files/bytes/truncated）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">cacheManager.get(key)</td>
+                            <td class="param">(key: string) => any | null</td>
+                            <td class="description">获取 API 缓存（15s TTL）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">cacheManager.set(key, data)</td>
+                            <td class="param">(key: string, data: any) => void</td>
+                            <td class="description">设置 API 缓存</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">cacheManager.clearRepoCache</td>
+                            <td class="param">() => void</td>
+                            <td class="description">清空仓库缓存</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">cacheManager.buildContext</td>
+                            <td class="param">(maxChars?: number) => string</td>
+                            <td class="description">拼接选中文件为 AI 上下文</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-plugin-utils">
+                <h3>1.5 UI 工具 (ctx.utils)</h3>
+                <p>创建 UI 组件、复制、下载、Markdown 解析</p>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">Utils.btnStyle</td>
+                            <td class="param">无</td>
+                            <td class="return">object</td>
+                            <td class="description">返回按钮样式对象</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">Utils.itemStyle</td>
+                            <td class="param">无</td>
+                            <td class="return">object</td>
+                            <td class="description">返回列表项样式对象</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">Utils.input</td>
+                            <td class="param">placeholder: string</td>
+                            <td class="return">HTMLInputElement</td>
+                            <td class="description">创建输入框（带暗色样式）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">Utils.select</td>
+                            <td class="param">options: array, label: string</td>
+                            <td class="return">{el: HTMLElement, sel: HTMLSelectElement}</td>
+                            <td class="description">创建带 label 的 select</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">Utils.applySelectLabels</td>
+                            <td class="param">sel: HTMLSelectElement, map: object</td>
+                            <td class="return">void</td>
+                            <td class="description">修改 select option 文本</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">Utils.copyToClipboard</td>
+                            <td class="param">text: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">复制文本到剪贴板</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">Utils.download</td>
+                            <td class="param">blob: Blob, name: string</td>
+                            <td class="return">void</td>
+                            <td class="description">下载 Blob 文件</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">Utils.parseMarkdown</td>
+                            <td class="param">text: string, owner?: string, repo?: string, branch?: string</td>
+                            <td class="return">string</td>
+                            <td class="description">Markdown 转 HTML（自动处理相对图片路径）</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-plugin-components">
+                <h3>1.6 UI 组件工厂 (ctx.components)</h3>
+                <p>创建与主面板风格一致的 UI 组件</p>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">UIComponents.createPanel</td>
+                            <td class="param">无</td>
+                            <td class="return">HTMLDivElement</td>
+                            <td class="description">创建面板根容器</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">UIComponents.createHeader</td>
+                            <td class="param">titleText: string</td>
+                            <td class="return">{header: HTMLElement, winCtrls: HTMLElement}</td>
+                            <td class="description">创建标题栏和窗口控制按钮容器</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">UIComponents.createWindowButton</td>
+                            <td class="param">text: string, style?: object</td>
+                            <td class="return">HTMLButtonElement</td>
+                            <td class="description">创建按钮（与面板风格一致）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">UIComponents.createTabs</td>
+                            <td class="param">无</td>
+                            <td class="return">HTMLDivElement</td>
+                            <td class="description">创建 Tab 按钮容器</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">UIComponents.createTabButton</td>
+                            <td class="param">text: string, active?: boolean</td>
+                            <td class="return">HTMLButtonElement</td>
+                            <td class="description">创建 Tab 风格按钮</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">UIComponents.createMainArea</td>
+                            <td class="param">无</td>
+                            <td class="return">HTMLDivElement</td>
+                            <td class="description">创建主内容区域</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">UIComponents.createStatusLabel</td>
+                            <td class="param">无</td>
+                            <td class="return">HTMLDivElement</td>
+                            <td class="description">创建状态栏标签</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">UIComponents.injectMarketplaceCSS</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">注入集市样式（插件无需调用）</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-plugin-manager">
+                <h3>1.7 插件管理器 (ctx.manager)</h3>
+                <p>加载/卸载插件、触发 Hook、从 GitHub 导入</p>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>字段/方法</th>
+                            <th>类型</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">manager.plugins</td>
+                            <td class="param">Map&lt;string, plugin&gt;</td>
+                            <td class="description">已加载插件 Map</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">manager.loadPlugin</td>
+                            <td class="param">(code: string, id?: string, save?: boolean) => Promise&lt;plugin | undefined&gt;</td>
+                            <td class="description">加载插件（save=true 会弹安全确认）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">manager.unloadPlugin</td>
+                            <td class="param">(id: string) => void</td>
+                            <td class="description">卸载插件</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">manager.trigger</td>
+                            <td class="param">(hookName: string, data?: any) => void</td>
+                            <td class="description">触发 Hook 事件</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">manager.importFromGitHub</td>
+                            <td class="param">(url: string) => Promise&lt;void&gt;</td>
+                            <td class="description">从 GitHub URL 导入插件（支持 raw/blob/tree）</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-plugin-ui">
+                <h3>1.8 UI 引用 (ctx.ui)</h3>
+                <p>访问面板 DOM 元素（在 ui:ready 后可用）</p>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>字段</th>
+                            <th>类型</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">ui.panel</td>
+                            <td class="param">HTMLDivElement</td>
+                            <td class="description">面板根 DOM</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui.tabs</td>
+                            <td class="param">HTMLDivElement</td>
+                            <td class="description">Tab 按钮容器（可追加自定义按钮）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui.mainArea</td>
+                            <td class="param">HTMLDivElement</td>
+                            <td class="description">主内容区域</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui.statusLabel</td>
+                            <td class="param">HTMLDivElement</td>
+                            <td class="description">状态栏标签</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui.marketplace</td>
+                            <td class="param">object | null</td>
+                            <td class="description">集市 UI 引用（overlay/win/list/status/inputs）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui.pluginsList</td>
+                            <td class="param">HTMLDivElement</td>
+                            <td class="description">已安装插件列表容器</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui.fileViewRefs</td>
+                            <td class="param">object | null</td>
+                            <td class="description">文件视图引用（preWrap/textarea/saveBtn/editBtn/pre/mdView/transPanel/transContent）</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui.aiPromptInput</td>
+                            <td class="param">HTMLTextAreaElement</td>
+                            <td class="description">AI 输入框</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui.aiOutputPre</td>
+                            <td class="param">HTMLPreElement</td>
+                            <td class="description">AI 输出区域</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui.ownerInput / ui.repoInput</td>
+                            <td class="param">HTMLInputElement</td>
+                            <td class="description">仓库 Owner/Repo 输入框</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui.branchSelect</td>
+                            <td class="param">HTMLSelectElement</td>
+                            <td class="description">分支选择下拉框</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="note">
+                    提示：更多 ui.* 字段（搜索、AI、浏览等）请参考完整代码。在 ui:ready Hook 后所有 UI 引用已创建。
+                </div>
+            </div>
+            
+            <div class="category" id="section-plugin-hooks">
+                <h3>1.9 Hook 事件</h3>
+                <p>通过 plugin.onHook(hookName, data) 监听</p>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>Hook 名称</th>
+                            <th>触发时机</th>
+                            <th>data 结构</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">ui:ready</td>
+                            <td class="description">UI 创建完成后</td>
+                            <td class="param">ui 对象</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui:show</td>
+                            <td class="description">面板显示时</td>
+                            <td class="param">undefined</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">ui:hide</td>
+                            <td class="description">面板隐藏时</td>
+                            <td class="param">undefined</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">mode:switch</td>
+                            <td class="description">Tab 模式切换时</td>
+                            <td class="param">mode: string</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">search:dir</td>
+                            <td class="description">搜索方向切换时</td>
+                            <td class="param">dir: 'repo' | 'user' | 'org'</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">search:repos</td>
+                            <td class="description">仓库搜索完成后</td>
+                            <td class="param">GitHub API 返回的 JSON</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">dir:load</td>
+                            <td class="description">目录加载完成后</td>
+                            <td class="param">{path: string, items: array}</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">file:open</td>
+                            <td class="description">文件打开完成后</td>
+                            <td class="param">{file: object, text: string}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- 2. 扩展内部 API (extension._*) -->
+        <div class="section" id="section-extension">
+            <h2>2. 扩展内部 API (extension._*) - 私有方法（谨慎使用）</h2>
+            <p style="color: #8b949e; margin-bottom: 20px;">
+                这些是 GitHubPanelExtension 的私有方法（以下划线开头）。插件可以调用，但升级时可能变动，不保证向后兼容。
+            </p>
+            
+            <div class="category" id="section-extension-lifecycle">
+                <h3>2.1 扩展生命周期（公共方法）</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                            <th>稳定性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">getInfo</td>
+                            <td class="param">无</td>
+                            <td class="return">object</td>
+                            <td class="description">返回 Scratch 扩展元数据（blocks、menus）</td>
+                            <td><span class="stability public">公共</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">showPanel</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">创建并显示面板（若未创建则 _createUI）</td>
+                            <td><span class="stability public">公共</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">hidePanel</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">隐藏面板、中止 AI、清理资源、触发 ui:hide</td>
+                            <td><span class="stability public">公共</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">setToken</td>
+                            <td class="param">args: {TOKEN: string}</td>
+                            <td class="return">void</td>
+                            <td class="description">设置 GitHub Token 并更新 AI 配置</td>
+                            <td><span class="stability public">公共</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">setAIProvider</td>
+                            <td class="param">args: {PROVIDER: string}</td>
+                            <td class="return">void</td>
+                            <td class="description">设置 AI 提供商（github/siliconflow/custom）</td>
+                            <td><span class="stability public">公共</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">setSiliconKey</td>
+                            <td class="param">args: {KEY: string}</td>
+                            <td class="return">void</td>
+                            <td class="description">设置硅基流动 API Key</td>
+                            <td><span class="stability public">公共</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">setSiliconTranslator</td>
+                            <td class="param">args: {STATE: 'on'|'off', MODEL: string}</td>
+                            <td class="return">void</td>
+                            <td class="description">开关硅基翻译并设置模型</td>
+                            <td><span class="stability public">公共</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-extension-ui">
+                <h3>2.2 UI 控制与面板管理</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                            <th>稳定性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">_createUI</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">构建整个面板 DOM、注入集市 CSS、触发 ui:ready</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_toggleMinimize</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">切换面板最小化/正常模式</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_toggleFullscreen</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">切换面板全屏/正常模式</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_applyPanelMode</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">根据 core.panelMode 应用面板样式</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_bindEvents</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">绑定搜索框回车、Tab 按钮点击等事件</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_renderActionRow</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">在浏览模式渲染“新建文件/上传/Fork”按钮</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_goBack</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">返回上级目录或退出文件视图</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-extension-marketplace">
+                <h3>2.3 插件集市（Marketplace）</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                            <th>稳定性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">_createMarketplaceUI</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">创建集市悬浮窗 DOM（若未创建）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_openMarketplace</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">显示集市悬浮窗，若未加载则 _loadMarket</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_closeMarketplace</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">隐藏集市悬浮窗</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_setMarketplaceStatus</td>
+                            <td class="param">msg: string</td>
+                            <td class="return">void</td>
+                            <td class="description">更新集市状态栏文本</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_loadMarket</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">从 core.marketplaceState 读取 GitHub 目录，过滤 .js（忽略 README.md），初始化 metadata</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_renderMarketListLoading</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">渲染“正在加载列表...”</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_renderMarketError</td>
+                            <td class="param">e: Error</td>
+                            <td class="return">void</td>
+                            <td class="description">渲染加载失败提示</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_renderMarketList</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">根据 searchQuery 过滤并渲染插件列表，异步加载元数据</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_fetchItemMetadata</td>
+                            <td class="param">url: string, itemData: object, authorEl: HTMLElement, descEl: HTMLElement, tagsEl: HTMLElement</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">异步 fetch 插件源码，正则提取 author/description/tags 并更新 UI</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_createMarketField</td>
+                            <td class="param">label: string, value: string</td>
+                            <td class="return">{wrap: HTMLElement, input: HTMLInputElement}</td>
+                            <td class="description">创建集市配置输入框</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_makeMarketplaceDraggable</td>
+                            <td class="param">handle: HTMLElement, win: HTMLElement</td>
+                            <td class="return">void</td>
+                            <td class="description">使集市窗口可拖拽</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-extension-plugin">
+                <h3>2.4 插件管理</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                            <th>稳定性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">_createPluginsArea</td>
+                            <td class="param">无</td>
+                            <td class="return">HTMLElement</td>
+                            <td class="description">创建插件管理区域 DOM（返回 area）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_refreshPluginsList</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">重新渲染已安装插件列表（显示 author/description/tags）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-extension-search">
+                <h3>2.5 搜索功能</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                            <th>稳定性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">_createSearchArea</td>
+                            <td class="param">无</td>
+                            <td class="return">HTMLElement</td>
+                            <td class="description">创建搜索区域 DOM（返回 area）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_createRepoItem</td>
+                            <td class="param">item: object</td>
+                            <td class="return">HTMLElement</td>
+                            <td class="description">将 GitHub repo 数据渲染为列表项 DOM</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">searchRepos</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">根据输入框与筛选条件搜索仓库，触发 search:repos</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">searchUsers</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">搜索用户</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">searchOrgs</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">搜索组织</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_switchSearchDir</td>
+                            <td class="param">dir: 'repo' | 'user' | 'org'</td>
+                            <td class="return">void</td>
+                            <td class="description">切换搜索方向，触发 search:dir</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-extension-browse">
+                <h3>2.6 浏览与文件操作</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                            <th>稳定性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">_createBrowseArea</td>
+                            <td class="param">无</td>
+                            <td class="return">HTMLElement</td>
+                            <td class="description">创建浏览区域 DOM（返回 area）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">loadDir</td>
+                            <td class="param">path: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">加载目录内容，触发 dir:load</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">openFile</td>
+                            <td class="param">file: object</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">打开文件（文本/图片/Markdown），触发 file:open</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_refreshFromInputs</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">根据 owner/repo 输入框刷新仓库</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_loadBranches</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">加载分支列表到 ui.branchSelect</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_loadFolderReadme</td>
+                            <td class="param">url: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">异步加载并渲染目录 README</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_toggleEditMode</td>
+                            <td class="param">path: string</td>
+                            <td class="return">void</td>
+                            <td class="description">切换文件编辑模式（显示/隐藏 textarea）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_saveFileChanges</td>
+                            <td class="param">path: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">保存文件修改到 GitHub</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showCreateUI</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">显示“新建文件”界面</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showUploadUI</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">触发文件上传输入框</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showAddFolderUI</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示“添加文件夹”对话框</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showDeleteFileUI</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示“删除文件”对话框</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_deleteFileWithDoubleConfirm</td>
+                            <td class="param">path: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">二次确认删除文件</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_deleteFile</td>
+                            <td class="param">path: string, message: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">实际执行删除文件 API 调用</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-extension-ai">
+                <h3>2.7 AI 功能</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                            <th>稳定性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">_createAIArea</td>
+                            <td class="param">无</td>
+                            <td class="return">HTMLElement</td>
+                            <td class="description">创建 AI 区域 DOM（返回 area）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_refreshAIConfigUI</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">根据 core.aiProvider 渲染 AI 配置面板</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_renderAIOutput</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">渲染 AI 流式输出到 ui.aiOutputPre</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_renderAICacheInfo</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">渲染缓存状态到 ui.aiCacheInfo</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_startAIStream</td>
+                            <td class="param">prompt: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">启动 AI 流式生成（无 system）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_startAIStreamWithSystem</td>
+                            <td class="param">system: string, prompt: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">启动 AI 流式生成（带 system）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_cacheWholeRepoForAI</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">递归读取整个仓库到缓存（危险）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showCacheReviewUI</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">显示缓存文件选择弹窗</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_handleEditorContextMenu</td>
+                            <td class="param">e: MouseEvent</td>
+                            <td class="return">void</td>
+                            <td class="description">处理编辑器右键菜单（AI 改写）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showAIRewritePanel</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">显示 AI 改写侧边栏</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_downloadRepoZip</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">打开仓库 zip 下载链接</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-extension-github">
+                <h3>2.8 GitHub 操作（PR/合并/Fork）</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                            <th>稳定性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">_showMergeUI</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示合并分支对话框</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showCreatePRUI</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示发起 PR 对话框</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_handleForkRepo</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">执行 Fork 仓库</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_generateFileHeatmap</td>
+                            <td class="param">path: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">生成文件贡献热力图弹窗</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showRepoHistory</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示仓库提交历史</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showPullRequests</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示仓库 PR 列表</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showCreateBranchUI</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示创建分支对话框</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showRepoContributors</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示仓库贡献者</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showRepoActivity</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示仓库活动事件</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-extension-user">
+                <h3>2.9 用户/组织/仓库管理</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                            <th>稳定性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">_createMyArea</td>
+                            <td class="param">无</td>
+                            <td class="return">HTMLElement</td>
+                            <td class="description">创建“我的”区域 DOM（返回 area）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_loadMyRepos</td>
+                            <td class="param">无</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">加载并渲染用户仓库列表</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showCreateRepoUI</td>
+                            <td class="param">无</td>
+                            <td class="return">void</td>
+                            <td class="description">显示“新建仓库”界面</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_createRepo</td>
+                            <td class="param">data: object</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">调用 GitHub API 创建仓库</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_deleteRepoSequence</td>
+                            <td class="param">fullName: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">三次确认删除仓库</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showOrgDetails</td>
+                            <td class="param">login: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示组织详情</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showUserDetails</td>
+                            <td class="param">login: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示用户详情</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_showProfile</td>
+                            <td class="param">login: string, isOrg: boolean</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">显示用户/组织资料 + README</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_fetchReadme</td>
+                            <td class="param">owner: string, repo: string</td>
+                            <td class="return">Promise&lt;string | null&gt;</td>
+                            <td class="description">获取 README 内容</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="category" id="section-extension-utils">
+                <h3>2.10 辅助与工具方法</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>方法</th>
+                            <th>参数</th>
+                            <th>返回值</th>
+                            <th>说明</th>
+                            <th>稳定性</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">_createTrendingArea</td>
+                            <td class="param">无</td>
+                            <td class="return">HTMLElement</td>
+                            <td class="description">创建“推荐”区域 DOM（返回 area）</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_loadTrending</td>
+                            <td class="param">period: 'week' | 'month'</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">加载 GitHub 热门仓库</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">_loadFolderReadme</td>
+                            <td class="param">url: string</td>
+                            <td class="return">Promise&lt;void&gt;</td>
+                            <td class="description">加载并渲染目录 README</td>
+                            <td><span class="stability private">私有</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- 使用建议 -->
+        <div style="margin-top: 40px; padding: 20px; background: #161b22; border-radius: 8px; border: 1px solid #30363d;">
+            <h3 style="color: #58a6ff; margin-bottom: 15px;">📌 使用建议</h3>
+            <ul style="color: #c9d1d9; line-height: 1.8;">
+                <li><strong>插件开发推荐调用：</strong>ctx.api.*、ctx.utils.*、ctx.components.*、ctx.manager.*、ctx.core.*（读取状态）</li>
+                <li><strong>谨慎调用：</strong>ctx.extension.*（公共方法相对稳定，私有方法可能变动）</li>
+                <li><strong>避免直接调用：</strong>ctx.extension._xxx（私有方法），除非你接受升级后插件可能失效的风险</li>
+                <li><strong>Hook 扩展：</strong>在 onHook 中监听 ui:ready、file:open、dir:load 等事件，避免直接覆盖内部方法</li>
+            </ul>
+        </div>
+        
+        <!-- 文档底部信息 -->
+        <div style="margin-top: 40px; padding: 20px; text-align: center; color: #8b949e; font-size: 0.9em; border-top: 1px solid #30363d;">
+            <p>GitHub 面板 Pro+ API 参考表 | 基于最终扩展代码生成 | 文档版本 1.0.0</p>
+            <p style="margin-top: 10px;">提示：本文档为 HTML 格式，可直接在浏览器中打开，支持搜索和导航</p>
+        </div>
+    </div>
+</body>
+</html>
