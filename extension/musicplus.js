@@ -1,6 +1,8 @@
 class musicplusExtension {
     constructor(runtime) {
         this.runtime = runtime;
+        this.fileInput = null;
+        this.pendingFileResolve = null;
         this.audioContext = null;
         this.inputGain = null;
         this.masterGain = null;
@@ -1119,13 +1121,8 @@ class musicplusExtension {
                 {
                     opcode: 'importScoreFile',
                     blockType: Scratch.BlockType.COMMAND,
-                    text: '从文件导入乐谱 [FILE]',
-                    arguments: {
-                        FILE: {
-                            type: Scratch.ArgumentType.STRING,
-                            defaultValue: ''
-                        }
-                    }
+                    text: '从文件导入乐谱',
+                    arguments: {}
                 },
                 {
                     opcode: 'setScoreTempo',
@@ -1466,7 +1463,7 @@ class musicplusExtension {
         return { notes, duration, isRest: false, original: trimmed };
     }
     parseScoreText(text) {
-        const normalized = text.replace(/\n/g, ';');
+        const normalized = text.replace(/\n/g, ';').replace(/\r/g, '');
         const lines = normalized.split(';');
         const score = [];
         for (const line of lines) {
@@ -1630,13 +1627,39 @@ class musicplusExtension {
             return event.notes.map(n => `${n}-${event.duration}`).join('-');
         }).join(';');
     }
-    importScoreFile(args) {
-        const fileText = args.FILE;
-        if (fileText && fileText.trim().length > 0) {
-            this.scoreData = this.parseScoreText(fileText);
-            this.scoreIndex = 0;
-        }
-        return Promise.resolve();
+    _createFileInput() {
+        if (this.fileInput) return;
+        this.fileInput = document.createElement('input');
+        this.fileInput.type = 'file';
+        this.fileInput.accept = '.txt,.music,.score';
+        this.fileInput.style.display = 'none';
+        this.fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file && this.pendingFileResolve) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    this.pendingFileResolve(event.target.result);
+                    this.pendingFileResolve = null;
+                    this.fileInput.value = '';
+                };
+                reader.readAsText(file);
+            }
+        });
+        document.body.appendChild(this.fileInput);
+    }
+
+    importScoreFile() {
+        this._createFileInput();
+        return new Promise(resolve => {
+            this.pendingFileResolve = (content) => {
+                if (content && content.trim().length > 0) {
+                    this.scoreData = this.parseScoreText(content);
+                    this.scoreIndex = 0;
+                }
+                resolve();
+            };
+            this.fileInput.click();
+        });
     }
     setScoreTempo(args) {
         this.tempo = Math.max(20, Math.min(500, parseInt(args.TEMPO)));
