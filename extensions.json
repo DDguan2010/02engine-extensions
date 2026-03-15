@@ -755,9 +755,9 @@
             ]
         },
         {
-          "slug": "GitHub面板",
-          "id": "GitHub面板",
-          "name": "GitHub面板",
+          "slug": "github面板",
+          "id": "github面板",
+          "name": "github面板",
           "description": "github面板。",
           "image": "GitHub面板.png",
           "by": [
