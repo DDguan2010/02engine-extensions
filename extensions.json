@@ -1,28 +1,6 @@
 {
     "extensions": [
         {
-            "slug": "musicplus",
-            "id": "musicplus",
-            "name": "音乐 +",
-            "description": "升级版音乐扩展",
-            "nameTranslations": {
-                "zh-cn": "音乐 +",
-                "en": "Music Plus"
-            },
-            "descriptionTranslations": {
-                "zh-cn": "升级版音乐扩展",
-                "en": "Music extension, but advanced!"
-            },
-            "image": "musicplus.png",
-            "by": [
-                {
-                    "name": "ChessBrainIsNotHuman",
-                    "link": "https://chessbrain.qzz.io/"
-                }
-            ],
-            "docs": false
-        },
-        {
             "slug": "kylin",
             "id": "kylin",
             "name": "kylin",
@@ -826,6 +804,28 @@
             "samples": [
                 "寻路"
             ]
+        },
+        {
+            "slug": "musicplus",
+            "id": "musicplus",
+            "name": "音乐 +",
+            "description": "升级版音乐扩展",
+            "nameTranslations": {
+                "zh-cn": "音乐 +",
+                "en": "Music Plus"
+            },
+            "descriptionTranslations": {
+                "zh-cn": "升级版音乐扩展",
+                "en": "Music extension, but advanced!"
+            },
+            "image": "musicplus.png",
+            "by": [
+                {
+                    "name": "ChessBrainIsNotHuman",
+                    "link": "https://chessbrain.qzz.io/"
+                }
+            ],
+            "docs": false
         }
     ]
 }
