@@ -775,9 +775,7 @@
             "slug": "让变量列表换行",
             "id": "让变量列表换行",
             "name": "让变量列表换行",
-            "description": "让变量列表换行的工具": {
-                "zh-cn": "一个工具随用随撇",
-            },
+            "description": "让变量列表换行的工具",
             "image": "让变量列表换行.jpg",
             "by": [
                 {
@@ -791,7 +789,7 @@
             "slug": "寻路",
             "id": "寻路",
             "name": "寻路",
-            "description": "寻路.",
+            "description": "寻路。",
             "nameTranslations": {
                 "zh-cn": "寻路"
             },
