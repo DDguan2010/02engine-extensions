@@ -214,7 +214,7 @@
           {
             opcode: "pause",
             blockType: Scratch.BlockType.COMMAND,
-            text: "暂停项目",
+            text: "暂停调试",
           },
           "---",
           {
@@ -228,28 +228,8 @@
             text: "隐藏调试器",
           },
 
-          "---",
-          {
-            opcode: "getListValue",
-            blockType: Scratch.BlockType.REPORTER,
-            text: "列表 [LIST] 的值",
-            arguments: {
-              LIST: { type: Scratch.ArgumentType.STRING, defaultValue: "列表" },
-            },
-            disableMonitor: true,
-          },
-          {
-            opcode: "setListValue",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "设置列表 [LIST] 为 [VALUE]",
-            arguments: {
-              LIST: { type: Scratch.ArgumentType.STRING, defaultValue: "列表" },
-              VALUE: {
-                type: Scratch.ArgumentType.STRING,
-                defaultValue: "1,2,3",
-              },
-            },
-          },
+          
+    
         ],
       };
     }
