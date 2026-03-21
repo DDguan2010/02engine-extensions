@@ -80,38 +80,29 @@ class Utils {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  
-  // 修复并优化的 Markdown 解析器
   static parseMarkdown(text, owner, repo, branch) {
     if (!text) return '';
-    
-    // 1. 处理图片链接 (相对路径转绝对路径)
     if (owner && repo) {
       const rawBase = `https://raw.githubusercontent.com/${owner}/${repo}/${branch || 'main'}`;
-      // 匹配 ![alt](path) 但排除 http 开头的绝对路径
       text = text.replace(/!\[([^\]]*)\]\((?!http|#)([^)]+)\)/g, (match, alt, path) => {
         const cleanPath = path.startsWith('/') ? path.slice(1) : path;
         return `![${alt}](${rawBase}/${cleanPath})`;
       });
     }
-
-    // 2. 提取代码块，防止被后续正则误伤
     const codeBlocks = [];
     text = text.replace(/```([\s\S]*?)```/g, (match, code) => {
       codeBlocks.push(code);
       return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
     });
-
-    // 3. 处理表格
     const tableRegex = /\|(.+)\|\n\|([-:| ]+)\|(\n(?:\|.*\|\n?)*)/g;
     text = text.replace(tableRegex, (match, header, separator, body) => {
       const headers = header.split('|').map(h => h.trim()).filter(h => h);
       const rows = body.trim().split('\n').map(row => {
         return row.split('|').map(c => c.trim()).filter(c => c);
       });
-      let html = '<table style="border-collapse:collapse;width:100%;margin:10px 0;border:1px solid #555;font-size:13px;">';
+      let html = '<table style="border-collapse:collapse;width:100%;margin:10px 0;border:1px solid #555;">';
       html += '<thead><tr style="background:rgba(255,255,255,0.1)">';
-      headers.forEach(h => html += `<th style="border:1px solid #555;padding:6px;text-align:left;">${h}</th>`);
+      headers.forEach(h => html += `<th style="border:1px solid #555;padding:6px;">${h}</th>`);
       html += '</tr></thead><tbody>';
       rows.forEach(row => {
         html += '<tr>';
@@ -123,31 +114,104 @@ class Utils {
       html += '</tbody></table>';
       return html;
     });
-
-    // 4. 基础 Markdown 语法替换
-    text = text.replace(/^# (.*$)/gim, '<h2 style="border-bottom:1px solid #444;padding-bottom:4px;margin-top:16px;">$1</h2>');
-    text = text.replace(/^## (.*$)/gim, '<h3 style="margin-top:14px;">$1</h3>');
-    text = text.replace(/^### (.*$)/gim, '<h4 style="margin-top:12px;">$1</h4>');
+    text = text.replace(/^# (.*$)/gim, '<h3>$1</h3>');
+    text = text.replace(/^## (.*$)/gim, '<h4>$1</h4>');
+    text = text.replace(/^### (.*$)/gim, '<h5>$1</h5>');
     text = text.replace(/\*\*(.*)\*\*/gim, '<b>$1</b>');
     text = text.replace(/\*(.*)\*/gim, '<i>$1</i>');
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank" style="color:#8af;text-decoration:none;">$1</a>');
-    text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/gim, '<img src="$2" alt="$1" style="max-width:100%;border-radius:4px;margin:8px 0;">');
-    text = text.replace(/^\s*-\s+(.*)/gim, '<li style="margin-left:20px;">$1</li>');
-    text = text.replace(/^>\s+(.*)/gim, '<blockquote style="border-left:4px solid #555;padding-left:10px;margin:10px 0;opacity:0.8;background:rgba(255,255,255,0.05);padding:8px;">$1</blockquote>');
-    
-    // 5. 换行处理 (简单处理，避免破坏 HTML 结构)
-    // 将双换行视为段落，单换行视为 <br>
-    text = text.replace(/\n\n/g, '<br><br>');
-    text = text.replace(/\n/g, '<br>');
-
-    // 6. 还原代码块
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank" style="color:#8af">$1</a>');
+    text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/gim, '<img src="$2" alt="$1" style="max-width:100%;border-radius:4px;margin:5px 0;">');
+    text = text.replace(/^\s*-\s+(.*)/gim, '<li>$1</li>');
+    text = text.replace(/^>\s+(.*)/gim, '<blockquote style="border-left:3px solid #555;padding-left:10px;opacity:0.8">$1</blockquote>');
     text = text.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
-      // 移除代码块首尾可能多余的换行符
-      const codeContent = codeBlocks[index].replace(/^\n+|\n+$/g, '');
-      return `<pre style="background:#1e1e1e;padding:10px;border-radius:6px;overflow-x:auto;border:1px solid #333;margin:10px 0;"><code style="font-family:monospace;color:#d4d4d4;">${codeContent}</code></pre>`;
+      return `<pre style="background:#333;padding:5px;border-radius:4px;overflow-x:auto"><code>${codeBlocks[index]}</code></pre>`;
     });
-
+    text = text.replace(/\n/g, '<br>');
     return text;
+  }
+
+  static createScrollbarStyle(target, thumb = 'rgba(255,255,255,0.25)', track = 'rgba(255,255,255,0.05)') {
+    if (!target) return;
+    target.style.scrollbarWidth = 'thin';
+    target.style.scrollbarColor = `${thumb} ${track}`;
+  }
+
+  static ensureStyle(id, css) {
+    if (document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+
+  static parsePluginSettingsSchema(schema) {
+    if (!Array.isArray(schema)) return [];
+    const out = [];
+    for (const item of schema) {
+      if (typeof item !== 'string') continue;
+      const raw = item.trim();
+      if (!raw) continue;
+
+      // string:a
+      let m = raw.match(/^string\s*:\s*([a-zA-Z_]\w*)$/i);
+      if (m) {
+        out.push({
+          type: 'string',
+          key: m[1],
+          label: m[1],
+          default: ''
+        });
+        continue;
+      }
+
+      // count:b / number:b
+      m = raw.match(/^(count|number)\s*:\s*([a-zA-Z_]\w*)$/i);
+      if (m) {
+        out.push({
+          type: 'number',
+          key: m[2],
+          label: m[2],
+          default: 0
+        });
+        continue;
+      }
+
+      // slider(1-100):c  / silder(1-100):c
+      m = raw.match(/^(slider|silder)\s*\(\s*(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)\s*\)\s*:\s*([a-zA-Z_]\w*)$/i);
+      if (m) {
+        out.push({
+          type: 'slider',
+          key: m[4],
+          label: m[4],
+          min: Number(m[2]),
+          max: Number(m[3]),
+          step: 1,
+          default: Number(m[2])
+        });
+        continue;
+      }
+
+      // choose(1,2,3):d
+      m = raw.match(/^choose\s*\(\s*([^)]+)\)\s*:\s*([a-zA-Z_]\w*)$/i);
+      if (m) {
+        const vals = m[1].split(',').map(s => s.trim()).filter(Boolean);
+        out.push({
+          type: 'choose',
+          key: m[2],
+          label: m[2],
+          options: vals,
+          default: vals[0] ?? ''
+        });
+        continue;
+      }
+
+      // 兼容对象字符串 JSON
+      try {
+        const obj = JSON.parse(raw);
+        if (obj && obj.key && obj.type) out.push(obj);
+      } catch {}
+    }
+    return out;
   }
 }
 
@@ -298,6 +362,17 @@ class APIManager {
     } catch (error) {
       throw new Error(`API请求失败: ${error.message}`);
     }
+  }
+
+  async fetchText(url, headers = {}) {
+    const res = await fetch(url, {
+      headers: {
+        ...headers,
+        ...this.headers
+      }
+    });
+    if (!res.ok) throw new Error(`请求失败: ${res.status}`);
+    return await res.text();
   }
 
   async fetchBlob(owner, repo, sha) {
@@ -644,6 +719,7 @@ class VirtualScroller {
     this.viewport.style.overflowY = 'auto';
     this.viewport.style.height = '100%';
     this.viewport.style.position = 'relative';
+    Utils.createScrollbarStyle(this.viewport);
 
     this.content = document.createElement('div');
     this.content.style.position = 'relative';
@@ -652,14 +728,15 @@ class VirtualScroller {
     this.viewport.appendChild(this.content);
     this.container.appendChild(this.viewport);
 
-    this.viewport.addEventListener('scroll', () => this._onScroll());
+    this._boundOnScroll = () => this._onScroll();
+    this.viewport.addEventListener('scroll', this._boundOnScroll);
   }
 
   setItems(items, renderFn) {
     this.items = items;
     this.renderFn = renderFn;
     this._updateDimensions();
-    this._render();
+    this._render(true);
   }
 
   _updateDimensions() {
@@ -672,14 +749,14 @@ class VirtualScroller {
     this._render();
   }
 
-  _render() {
-    const viewportHeight = this.viewport.clientHeight;
+  _render(force = false) {
+    const viewportHeight = this.viewport.clientHeight || this.container.clientHeight || 300;
     const scrollTop = this.scrollTop;
 
     const start = Math.max(0, Math.floor(scrollTop / this.itemHeight) - this.buffer);
     const end = Math.min(this.items.length, Math.ceil((scrollTop + viewportHeight) / this.itemHeight) + this.buffer);
 
-    if (start === this.startIndex && end === this.endIndex) return;
+    if (!force && start === this.startIndex && end === this.endIndex) return;
 
     this.startIndex = start;
     this.endIndex = end;
@@ -707,7 +784,7 @@ class VirtualScroller {
   }
 
   destroy() {
-    this.viewport.removeEventListener('scroll', this._onScroll);
+    this.viewport.removeEventListener('scroll', this._boundOnScroll);
     this.container.innerHTML = '';
   }
 }
@@ -733,7 +810,10 @@ class UIComponents {
       boxSizing: 'border-box',
       padding: '10px',
       overflow: 'hidden',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+      resize: 'vertical',
+      minHeight: '420px',
+      maxHeight: '95vh'
     });
     return panel;
   }
@@ -806,8 +886,10 @@ class UIComponents {
       border: '1px solid rgba(255,255,255,0.15)',
       borderRadius: '10px',
       background: 'rgba(0,0,0,0.2)',
-      padding: '0'
+      padding: '0',
+      minHeight: '0'
     });
+    Utils.createScrollbarStyle(main);
     return main;
   }
 
@@ -852,6 +934,8 @@ class UIComponents {
   overflow:hidden;
   color:#fff;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  resize: vertical;
+  min-height: 360px;
 }
 .pmk2-titlebar{
   display:flex;
@@ -913,6 +997,8 @@ class UIComponents {
   display:flex;
   flex-direction:column;
   gap: 10px;
+  overflow:auto;
+  scrollbar-width: thin;
 }
 .pmk2-right{
   flex:1;
@@ -921,6 +1007,8 @@ class UIComponents {
   display:flex;
   flex-direction:column;
   gap: 10px;
+  overflow:auto;
+  scrollbar-width: thin;
 }
 .pmk2-field label{
   display:block;
@@ -943,9 +1031,6 @@ class UIComponents {
   border-color: rgba(60,160,255,0.45);
   box-shadow: 0 0 0 3px rgba(60,160,255,0.12);
 }
-.pmk2-search {
-  margin-bottom: 10px;
-}
 .pmk2-hint{
   font-size: 11px;
   opacity: 0.68;
@@ -964,6 +1049,7 @@ class UIComponents {
   min-height:0;
   overflow:auto;
   padding-right: 4px;
+  scrollbar-width: thin;
 }
 .pmk2-item{
   border: 1px solid rgba(255,255,255,0.10);
@@ -971,9 +1057,6 @@ class UIComponents {
   border-radius: 12px;
   padding: 10px;
   margin-bottom: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 .pmk2-itemtop{
   display:flex;
@@ -984,12 +1067,6 @@ class UIComponents {
   flex:1;
   min-width: 0;
 }
-.pmk2-header-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
 .pmk2-itemname{
   font-weight: 800;
   word-break: break-word;
@@ -997,43 +1074,12 @@ class UIComponents {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pmk2-author {
-  font-size: 10px;
-  background: rgba(255,255,255,0.1);
-  padding: 2px 6px;
-  border-radius: 4px;
-  color: #8af;
-  white-space: nowrap;
-}
-.pmk2-tags {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-.pmk2-tag {
-  font-size: 10px;
-  background: rgba(255,255,255,0.15);
-  padding: 1px 5px;
-  border-radius: 4px;
-  color: #ddd;
-}
 .pmk2-itemmeta{
   font-size: 11px;
   opacity: 0.7;
-  margin-top: 2px;
+  margin-top: 4px;
   word-break: break-word;
   white-space: normal;
-}
-.pmk2-desc {
-  font-size: 12px;
-  color: #ccc;
-  background: rgba(0,0,0,0.2);
-  padding: 6px;
-  border-radius: 6px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.4;
 }
 .pmk2-itembtns{
   margin-left:8px;
@@ -1058,6 +1104,75 @@ class UIComponents {
   background: rgba(0,0,0,0.25);
   opacity: 0.85;
 }
+
+/* plugin panel scroll */
+.gpp-scrollable{
+  overflow:auto !important;
+  scrollbar-width: thin;
+}
+.gpp-scrollable::-webkit-scrollbar,
+.pmk2-list::-webkit-scrollbar,
+.pmk2-left::-webkit-scrollbar,
+.pmk2-right::-webkit-scrollbar{
+  width:10px;
+  height:10px;
+}
+.gpp-scrollable::-webkit-scrollbar-thumb,
+.pmk2-list::-webkit-scrollbar-thumb,
+.pmk2-left::-webkit-scrollbar-thumb,
+.pmk2-right::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,0.25);
+  border-radius: 8px;
+}
+.gpp-scrollable::-webkit-scrollbar-track,
+.pmk2-list::-webkit-scrollbar-track,
+.pmk2-left::-webkit-scrollbar-track,
+.pmk2-right::-webkit-scrollbar-track{
+  background: rgba(255,255,255,0.05);
+}
+
+/* plugin settings */
+.gpp-plugin-card{
+  border:1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.gpp-plugin-settings{
+  margin-top:10px;
+  border-top:1px solid rgba(255,255,255,0.08);
+  padding-top:10px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.gpp-plugin-setting-row{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.gpp-plugin-setting-row label{
+  font-size:11px;
+  opacity:0.75;
+}
+.gpp-plugin-setting-row input,
+.gpp-plugin-setting-row select{
+  background: rgba(0,0,0,0.3);
+  border: 1px solid #555;
+  color: #fff;
+  padding: 6px;
+  border-radius: 6px;
+}
+.gpp-plugin-setting-inline{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.gpp-plugin-setting-inline span{
+  font-size:12px;
+  min-width:50px;
+}
 `;
     document.head.appendChild(style);
   }
@@ -1069,18 +1184,220 @@ class PluginManager {
     this.extension = extension;
     this.plugins = new Map();
     this.hooks = new Map();
+    this.pluginSettings = new Map();
     this._loadFromStorage();
   }
 
   get context() {
-    return {
-      core: this.extension.core,
-      ui: this.extension.ui,
-      api: this.extension.core.apiManager,
+    const ext = this.extension;
+    const core = ext.core;
+    const api = core.apiManager;
+    const manager = this;
+
+    const pluginAPI = {
+      // 基础
+      version: '2.0.0',
+      alert: (msg) => alert(msg),
+      confirm: (msg) => confirm(msg),
+      prompt: (msg, def = '') => prompt(msg, def),
+      log: (...args) => console.log('[PluginAPI]', ...args),
+
+      // UI / 核心
+      showPanel: () => ext.showPanel(),
+      hidePanel: () => ext.hidePanel(),
+      switchMode: (mode) => ext._switchMode(mode),
+      getMode: () => core.mode,
+      setStatus: (msg) => LoadingManager.setMessage(msg),
+      setError: (msg) => LoadingManager.setError(msg),
+      getUI: () => ext.ui,
+      getCore: () => core,
+      getExtension: () => ext,
+
+      // 仓库上下文
+      getCurrentRepo: () => ({
+        owner: core.currentOwner,
+        repo: core.currentRepo,
+        path: core.currentPath,
+        branch: core.currentBranch,
+        defaultBranch: core.defaultBranch
+      }),
+      enterRepo: async (owner, repo) => {
+        ext.ui.ownerInput.value = owner;
+        ext.ui.repoInput.value = repo;
+        ext._switchMode('browse');
+        await ext._refreshFromInputs();
+      },
+      loadDir: async (path = '') => await ext.loadDir(path),
+      openFileByPath: async (path) => {
+        ErrorHandler.assertRepo(core.currentOwner, core.currentRepo);
+        const file = await api.fetchJson(`https://api.github.com/repos/${core.currentOwner}/${core.currentRepo}/contents/${path}?ref=${core.currentBranch}`);
+        return await ext.openFile(file);
+      },
+
+      // GitHub API 扩展
+      github: {
+        fetchJson: async (url) => await api.fetchJson(url),
+        fetchText: async (url, headers = {}) => await api.fetchText(url, headers),
+        request: async (url, init = {}) => {
+          const res = await fetch(url, {
+            ...init,
+            headers: {
+              ...(init.headers || {}),
+              ...api.headers
+            }
+          });
+          return res;
+        },
+        getRepo: async (owner, repo) => await api.fetchJson(`https://api.github.com/repos/${owner}/${repo}`),
+        getBranches: async (owner, repo) => await api.fetchJson(`https://api.github.com/repos/${owner}/${repo}/branches`),
+        getContents: async (owner, repo, path = '', ref = '') => {
+          const suffix = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+          return await api.fetchJson(`https://api.github.com/repos/${owner}/${repo}/contents/${path}${suffix}`);
+        },
+        getCommits: async (owner, repo, query = '') => await api.fetchJson(`https://api.github.com/repos/${owner}/${repo}/commits${query ? (query.startsWith('?') ? query : '?' + query) : ''}`),
+        putFile: async (...args) => await api.putFile(...args),
+        deleteFile: async (...args) => await api.deleteFile(...args),
+        triggerWorkflow: async (...args) => await api.triggerWorkflow(...args),
+        mergeBranch: async (...args) => await api.mergeBranch(...args),
+        forkRepo: async (...args) => await api.forkRepo(...args),
+        createPullRequest: async (...args) => await api.createPullRequest(...args),
+        headers: () => ({ ...api.headers })
+      },
+
+      // AI 扩展
+      ai: {
+        stream: async (messages, onChunk) => await core.aiManager.stream(messages, onChunk),
+        abort: () => core.aiManager.abort(),
+        translate: async (text, model) => await core.aiManager.translate(text, model || core.sfTranslateModel),
+        generateIntro: async (repoName, desc, model) => await core.aiManager.generateIntro(repoName, desc, model || 'internlm/internlm2_5-7b-chat'),
+        buffer: () => core.aiManager.streamBuffer,
+        isStreaming: () => core.aiManager.isStreaming
+      },
+
+      // 缓存
+      cache: {
+        get: (key) => core.cacheManager.get(key),
+        set: (key, value) => core.cacheManager.set(key, value),
+        clearRepoCache: () => core.cacheManager.clearRepoCache(),
+        buildRepoContext: (maxChars = 120000) => core.cacheManager.buildContext(maxChars),
+        getRepoTextCache: () => core.cacheManager.repoTextCache,
+        getRepoSelection: () => core.cacheManager.repoCacheSelection,
+        getRepoMeta: () => core.cacheManager.repoCacheMeta
+      },
+
+      // 插件系统
+      plugins: {
+        list: () => Array.from(manager.plugins.values()).map(p => ({
+          id: p.id,
+          name: p.name,
+          version: p.version
+        })),
+        get: (id) => manager.plugins.get(id),
+        unload: (id) => manager.unloadPlugin(id),
+        trigger: (hook, data) => manager.trigger(hook, data),
+        importFromGitHub: async (url) => await manager.importFromGitHub(url),
+        loadCode: async (code, id = null, save = true) => await manager.loadPlugin(code, id, save)
+      },
+
+      // 参数系统
+      settings: {
+        getAll: (pluginId) => manager.getPluginSettings(pluginId),
+        get: (pluginId, key, def = null) => manager.getPluginSetting(pluginId, key, def),
+        set: (pluginId, key, value) => manager.setPluginSetting(pluginId, key, value),
+        ownAll: (pluginId) => manager.getPluginSettings(pluginId),
+        ownGet: (pluginId, key, def = null) => manager.getPluginSetting(pluginId, key, def)
+      },
+
+      // 一般工具
       utils: Utils,
       components: UIComponents,
-      extension: this.extension,
-      manager: this
+      createButton: (text, onclick, style = {}) => {
+        const btn = UIComponents.createWindowButton(text, style);
+        if (onclick) btn.onclick = onclick;
+        return btn;
+      },
+      createPanelCard: (title, html = '') => {
+        const d = document.createElement('div');
+        d.className = 'gpp-plugin-card';
+        d.innerHTML = `<div style="font-weight:700;margin-bottom:8px">${title}</div>${html}`;
+        return d;
+      },
+      createModal: (title = '插件窗口') => {
+        const overlay = document.createElement('div');
+        Object.assign(overlay.style, {
+          position: 'fixed',
+          inset: '0',
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100300
+        });
+        const card = document.createElement('div');
+        Object.assign(card.style, {
+          width: '680px',
+          maxWidth: '95vw',
+          maxHeight: '85vh',
+          overflow: 'auto',
+          background: '#1e1e1e',
+          color: '#fff',
+          border: '1px solid rgba(255,255,255,0.14)',
+          borderRadius: '12px',
+          padding: '14px'
+        });
+        Utils.createScrollbarStyle(card);
+        const header = document.createElement('div');
+        Object.assign(header.style, {
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '10px'
+        });
+        const t = document.createElement('div');
+        t.textContent = title;
+        t.style.fontWeight = '800';
+        const close = UIComponents.createWindowButton('关闭');
+        close.onclick = () => overlay.remove();
+        header.appendChild(t);
+        header.appendChild(close);
+        const body = document.createElement('div');
+        overlay.appendChild(card);
+        card.appendChild(header);
+        card.appendChild(body);
+        overlay.addEventListener('mousedown', (e) => {
+          if (e.target === overlay) overlay.remove();
+        });
+        document.body.appendChild(overlay);
+        return {
+          overlay,
+          card,
+          body,
+          close: () => overlay.remove()
+        };
+      },
+
+      // 扩展页面注入
+      addTabButton: (text, onClick) => {
+        const btn = UIComponents.createTabButton(text);
+        btn.onclick = onClick;
+        ext.ui.tabs.appendChild(btn);
+        return btn;
+      },
+      addMainAreaNode: (node) => {
+        ext.ui.mainArea.appendChild(node);
+        return node;
+      }
+    };
+
+    return {
+      core,
+      ui: ext.ui,
+      api,
+      utils: Utils,
+      components: UIComponents,
+      extension: ext,
+      manager: this,
+      pluginAPI
     };
   }
 
@@ -1098,6 +1415,11 @@ class PluginManager {
           this.extension.core.token = data.token;
           this.extension.core.updateAIConfig();
         }
+        if (data.pluginSettings) {
+          Object.entries(data.pluginSettings).forEach(([id, vals]) => {
+            this.pluginSettings.set(id, vals || {});
+          });
+        }
       }
     } catch (e) {
       console.error('Failed to load from storage', e);
@@ -1113,11 +1435,69 @@ class PluginManager {
         enabled: true
       });
     });
+    const settingsObj = {};
+    this.pluginSettings.forEach((v, k) => {
+      settingsObj[k] = v;
+    });
     const data = {
       token: this.extension.core.token,
-      plugins: list
+      plugins: list,
+      pluginSettings: settingsObj
     };
     localStorage.setItem('github_panel_storage', JSON.stringify(data));
+  }
+
+  _normalizePluginAPI(plugin) {
+    const schemaRaw = plugin.API || plugin.api || plugin.params || plugin.settingsSchema || [];
+    const schema = Utils.parsePluginSettingsSchema(schemaRaw);
+    plugin._settingsSchema = schema;
+
+    if (!this.pluginSettings.has(plugin.id)) this.pluginSettings.set(plugin.id, {});
+    const values = this.pluginSettings.get(plugin.id);
+
+    schema.forEach(item => {
+      if (!(item.key in values)) {
+        values[item.key] = item.default;
+      }
+    });
+
+    plugin.getSetting = (key, def = null) => this.getPluginSetting(plugin.id, key, def);
+    plugin.setSetting = (key, value) => this.setPluginSetting(plugin.id, key, value);
+    plugin.getSettings = () => this.getPluginSettings(plugin.id);
+
+    this.pluginSettings.set(plugin.id, values);
+  }
+
+  getPluginSettings(id) {
+    return {
+      ...(this.pluginSettings.get(id) || {})
+    };
+  }
+
+  getPluginSetting(id, key, def = null) {
+    const data = this.pluginSettings.get(id) || {};
+    return key in data ? data[key] : def;
+  }
+
+  setPluginSetting(id, key, value) {
+    const data = this.pluginSettings.get(id) || {};
+    data[key] = value;
+    this.pluginSettings.set(id, data);
+    this._saveToStorage();
+    this.trigger('plugin:settings:change', {
+      pluginId: id,
+      key,
+      value,
+      values: { ...data }
+    });
+    const plugin = this.plugins.get(id);
+    if (plugin && typeof plugin.onSettingsChange === 'function') {
+      try {
+        plugin.onSettingsChange(key, value, { ...data }, this.context);
+      } catch (e) {
+        console.error(`Plugin ${id} settings change error:`, e);
+      }
+    }
   }
 
   async loadPlugin(code, id = null, save = true) {
@@ -1127,19 +1507,17 @@ class PluginManager {
     }
 
     try {
-      // 优化：增加 description, author, tags 字段，保证向后兼容
       const pluginFactory = new Function('context', `
-       const { core, ui, api, utils, components, extension, manager } = context;
+       const { core, ui, api, utils, components, extension, manager, pluginAPI } = context;
        const plugin = {
          id: "${id || 'temp-' + Date.now()}",
          name: "Unknown Plugin",
          version: "0.0.1",
-         description: "", // 默认空
-         author: "Unknown", // 默认未知
-         tags: [], // 默认空标签
          init: () => {},
          onHook: () => {},
-         style: ""
+         onSettingsChange: null,
+         style: "",
+         API: []
        };
        ${code}
        return plugin;
@@ -1155,6 +1533,8 @@ class PluginManager {
         document.head.appendChild(style);
         plugin._styleEl = style;
       }
+
+      this._normalizePluginAPI(plugin);
 
       if (plugin.init) plugin.init(this.context);
 
@@ -1183,7 +1563,7 @@ class PluginManager {
     this.plugins.forEach(p => {
       if (p.onHook) {
         try {
-          p.onHook(hookName, data);
+          p.onHook(hookName, data, this.context);
         } catch (e) {
           console.error(`Plugin ${p.id} hook error:`, e);
         }
@@ -1329,7 +1709,7 @@ class GitHubPanelExtension {
   constructor() {
     this.core = new GitHubPanelCore();
     this.ui = {
-      marketplace: null // Holder for marketplace UI refs
+      marketplace: null
     };
     this.virtualScrollers = new Map();
     this.pluginManager = new PluginManager(this);
@@ -1462,7 +1842,7 @@ class GitHubPanelExtension {
     if (this.ui.contextMenu) this.ui.contextMenu.style.display = 'none';
     if (this.ui.aiRewritePanel) this.ui.aiRewritePanel.style.display = 'none';
     if (this.ui.panel) this.ui.panel.style.display = 'none';
-    this._closeMarketplace(); // Also close marketplace if main panel closes (optional, but cleaner)
+    this._closeMarketplace();
     this.virtualScrollers.forEach(vs => vs.destroy());
     this.virtualScrollers.clear();
     this.pluginManager.trigger('ui:hide');
@@ -1489,7 +1869,6 @@ class GitHubPanelExtension {
   // ==================== UI创建 ====================
 
   _createUI() {
-    // 注入插件集市CSS
     UIComponents.injectMarketplaceCSS();
 
     this.ui.panel = UIComponents.createPanel();
@@ -1562,6 +1941,13 @@ class GitHubPanelExtension {
     });
     window.addEventListener('mouseup', () => drag.on = false);
 
+    const resizeObserver = new ResizeObserver(() => {
+      this.virtualScrollers.forEach(vs => {
+        try { vs._render(true); } catch {}
+      });
+    });
+    resizeObserver.observe(this.ui.panel);
+
     this.ui.tabs = UIComponents.createTabs();
     this.ui.tabSearchBtn = UIComponents.createTabButton('搜索', true);
     this.ui.tabBrowseBtn = UIComponents.createTabButton('浏览');
@@ -1570,7 +1956,6 @@ class GitHubPanelExtension {
     this.ui.tabAIBtn = UIComponents.createTabButton('AI');
     this.ui.tabPluginsBtn = UIComponents.createTabButton('🧩 插件');
 
-    // 插件集市按钮 (Native Integration)
     const marketplaceBtn = UIComponents.createWindowButton("插件集市", {
       background: "rgba(160,120,255,0.22)",
       border: "1px solid rgba(160,120,255,0.28)",
@@ -1591,7 +1976,7 @@ class GitHubPanelExtension {
     this.ui.tabs.appendChild(this.ui.tabMyBtn);
     this.ui.tabs.appendChild(this.ui.tabAIBtn);
     this.ui.tabs.appendChild(this.ui.tabPluginsBtn);
-    this.ui.tabs.appendChild(marketplaceBtn); // Add Marketplace button
+    this.ui.tabs.appendChild(marketplaceBtn);
     this.ui.tabs.appendChild(dirSel.el);
 
     this.ui.searchDirSelectWrap = dirSel.el;
@@ -1608,13 +1993,15 @@ class GitHubPanelExtension {
     LoadingManager.init(this.ui.statusLabel);
 
     this.ui.mainArea = UIComponents.createMainArea();
+    this.ui.mainArea.classList.add('gpp-scrollable');
 
     const contentWrap = document.createElement('div');
     Object.assign(contentWrap.style, {
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      width: '100%'
+      width: '100%',
+      minHeight: '0'
     });
 
     const bodyWrap = document.createElement('div');
@@ -1622,7 +2009,8 @@ class GitHubPanelExtension {
       display: 'flex',
       flexDirection: 'column',
       flex: '1',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      minHeight: '0'
     });
 
     bodyWrap.appendChild(this.ui.tabs);
@@ -1642,7 +2030,6 @@ class GitHubPanelExtension {
     document.body.appendChild(this.ui.panel);
     this.ui._panelBody = bodyWrap;
 
-    // Initialize Marketplace UI hidden
     this._createMarketplaceUI();
 
     this._bindEvents();
@@ -1700,16 +2087,6 @@ class GitHubPanelExtension {
     const right = document.createElement("div");
     right.className = "pmk2-right";
 
-    // 搜索框
-    const searchInput = document.createElement("input");
-    searchInput.className = "pmk2-input pmk2-search";
-    searchInput.placeholder = "搜索插件 (名称/作者/标签)...";
-    searchInput.addEventListener("input", () => {
-      this.ui.marketplace.searchQuery = searchInput.value.toLowerCase();
-      this._renderMarketList();
-    });
-    left.appendChild(searchInput);
-
     const mkState = this.core.marketplaceState;
     const fOwner = this._createMarketField("Owner", mkState.owner);
     const fRepo = this._createMarketField("Repo", mkState.repo);
@@ -1762,7 +2139,6 @@ class GitHubPanelExtension {
       win,
       list,
       status,
-      searchQuery: "",
       inputs: {
         owner: fOwner.input,
         repo: fRepo.input,
@@ -1909,15 +2285,6 @@ class GitHubPanelExtension {
         })
         .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
-      // 初始化元数据字段
-      jsFiles.forEach(f => {
-        f.metadata = {
-          author: null,
-          description: null,
-          tags: []
-        };
-      });
-
       this.core.marketplaceState.items = jsFiles;
       this.core.marketplaceState.lastLoadedAt = Date.now();
 
@@ -1958,27 +2325,14 @@ class GitHubPanelExtension {
       branch
     } = this.core.marketplaceState;
     const items = this.core.marketplaceState.items || [];
-    const query = this.ui.marketplace.searchQuery || "";
-
     list.innerHTML = "";
 
-    // 过滤逻辑
-    const filteredItems = items.filter(it => {
-      if (!query) return true;
-      const nameMatch = it.name.toLowerCase().includes(query);
-      const meta = it.metadata || {};
-      const authorMatch = (meta.author || "").toLowerCase().includes(query);
-      const descMatch = (meta.description || "").toLowerCase().includes(query);
-      const tagMatch = (meta.tags || []).some(t => t.toLowerCase().includes(query));
-      return nameMatch || authorMatch || descMatch || tagMatch;
-    });
-
-    if (filteredItems.length === 0) {
-      list.innerHTML = `<div class="pmk2-empty">${items.length === 0 ? "目录中没有可用的 .js 插件文件。" : "没有找到匹配的插件。"}</div>`;
+    if (items.length === 0) {
+      list.innerHTML = `<div class="pmk2-empty">目录中没有可用的 .js 插件文件。</div>`;
       return;
     }
 
-    filteredItems.forEach((it) => {
+    items.forEach((it) => {
       const item = document.createElement("div");
       item.className = "pmk2-item";
 
@@ -1988,48 +2342,16 @@ class GitHubPanelExtension {
       const textPart = document.createElement("div");
       textPart.className = "pmk2-itemtext";
 
-      // 标题行：名称 + 作者
-      const headerLine = document.createElement("div");
-      headerLine.className = "pmk2-header-line";
-
       const name = document.createElement("div");
       name.className = "pmk2-itemname";
       name.textContent = it.name;
-
-      const authorBadge = document.createElement("div");
-      authorBadge.className = "pmk2-author";
-      authorBadge.textContent = it.metadata?.author ? "@" + it.metadata.author : "Loading...";
-      authorBadge.style.display = it.metadata?.author ? "block" : "none";
-
-      headerLine.appendChild(name);
-      headerLine.appendChild(authorBadge);
 
       const meta = document.createElement("div");
       meta.className = "pmk2-itemmeta";
       meta.textContent = it.path;
 
-      // 标签区域
-      const tagsDiv = document.createElement("div");
-      tagsDiv.className = "pmk2-tags";
-      if (it.metadata?.tags && it.metadata.tags.length > 0) {
-        it.metadata.tags.forEach(tag => {
-          const t = document.createElement("span");
-          t.className = "pmk2-tag";
-          t.textContent = tag;
-          tagsDiv.appendChild(t);
-        });
-      }
-
-      // 介绍区域
-      const descDiv = document.createElement("div");
-      descDiv.className = "pmk2-desc";
-      descDiv.textContent = it.metadata?.description || "";
-      descDiv.style.display = it.metadata?.description ? "block" : "none";
-
-      textPart.appendChild(headerLine);
+      textPart.appendChild(name);
       textPart.appendChild(meta);
-      textPart.appendChild(tagsDiv);
-      textPart.appendChild(descDiv);
 
       const btns = document.createElement("div");
       btns.className = "pmk2-itembtns";
@@ -2048,6 +2370,7 @@ class GitHubPanelExtension {
         try {
           await this.pluginManager.importFromGitHub(rawUrl);
           alert(`已安装：${it.name}`);
+          this._refreshPluginsList();
         } catch (e) {
           alert(`安装失败：${e.message || e}`);
         } finally {
@@ -2075,67 +2398,7 @@ class GitHubPanelExtension {
 
       item.appendChild(top);
       list.appendChild(item);
-
-      // 异步加载元数据 (作者、介绍、标签)
-      if (!it.metadataLoaded) {
-        this._fetchItemMetadata(rawUrl, it, authorBadge, descDiv, tagsDiv);
-      }
     });
-  }
-
-  // 新增：异步获取插件元数据并更新UI和数据模型
-  async _fetchItemMetadata(url, itemData, authorEl, descEl, tagsEl) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const code = await res.text();
-
-      // 正则提取
-      const authorMatch = code.match(/plugin\.author\s*=\s*(['"`])(.*?)\1/);
-      const descMatch = code.match(/plugin\.description\s*=\s*(['"`])(.*?)\1/);
-      const tagsMatch = code.match(/plugin\.tags\s*=\s*\[(.*?)\]/s);
-
-      let updated = false;
-
-      if (authorMatch && authorMatch[2]) {
-        itemData.metadata.author = authorMatch[2];
-        authorEl.textContent = "@" + authorMatch[2];
-        authorEl.style.display = "block";
-        updated = true;
-      }
-
-      if (descMatch && descMatch[2]) {
-        itemData.metadata.description = descMatch[2];
-        descEl.textContent = descMatch[2];
-        descEl.style.display = "block";
-        updated = true;
-      }
-
-      if (tagsMatch && tagsMatch[1]) {
-        // 简单的解析：去除引号，分割逗号
-        const rawTags = tagsMatch[1].split(',').map(t => t.trim().replace(/^['"]|['"]$/g, '')).filter(t => t);
-        itemData.metadata.tags = rawTags;
-        tagsEl.innerHTML = '';
-        rawTags.forEach(tag => {
-          const t = document.createElement("span");
-          t.className = "pmk2-tag";
-          t.textContent = tag;
-          tagsEl.appendChild(t);
-        });
-        updated = true;
-      }
-
-      if (updated) {
-        itemData.metadataLoaded = true;
-        // 如果当前有搜索词，可能需要重新渲染列表以应用过滤
-        if (this.ui.marketplace.searchQuery) {
-          // 简单的防抖或直接重新渲染
-          // 这里为了简单，不强制重新渲染整个列表，因为用户正在输入时会触发
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to fetch metadata for", url);
-    }
   }
 
   // ==================== 原有 UI 组件构建 ====================
@@ -2143,13 +2406,24 @@ class GitHubPanelExtension {
   _createPluginsArea() {
     const area = document.createElement('div');
     area.style.display = 'none';
+    area.style.maxHeight = '260px';
+    area.style.overflowY = 'auto';
+    area.style.paddingRight = '4px';
+    area.classList.add('gpp-scrollable');
+    Utils.createScrollbarStyle(area);
 
     const controls = document.createElement('div');
     Object.assign(controls.style, {
       display: 'flex',
       gap: '8px',
       marginBottom: '10px',
-      flexWrap: 'wrap'
+      flexWrap: 'wrap',
+      position: 'sticky',
+      top: '0',
+      zIndex: '2',
+      background: 'rgba(0,0,0,0.45)',
+      paddingBottom: '8px',
+      backdropFilter: 'blur(6px)'
     });
 
     const importLocalBtn = UIComponents.createWindowButton('导入本地插件 (.js)');
@@ -2205,7 +2479,7 @@ class GitHubPanelExtension {
     const pasteTextarea = document.createElement('textarea');
     Object.assign(pasteTextarea.style, {
       width: '100%',
-      height: '100px',
+      height: '120px',
       background: 'rgba(0,0,0,0.3)',
       color: '#fff',
       border: '1px solid #555',
@@ -2213,8 +2487,15 @@ class GitHubPanelExtension {
       padding: '8px',
       boxSizing: 'border-box',
       fontFamily: 'monospace',
-      fontSize: '12px'
+      fontSize: '12px',
+      resize: 'vertical',
+      minHeight: '100px'
     });
+    const apiHint = document.createElement('div');
+    apiHint.style.fontSize = '11px';
+    apiHint.style.opacity = '0.65';
+    apiHint.innerHTML = `插件参数写法示例：<br><code>plugin.API = ["string:a","count:b","silder(1-100):c","choose(1,2,3):d"];</code><br>说明：a=字符串，b=数值，c=滑块，d=选择项。`;
+
     const loadPasteBtn = UIComponents.createWindowButton('加载粘贴的代码', {
       background: '#28a745'
     });
@@ -2232,6 +2513,7 @@ class GitHubPanelExtension {
     };
     pasteBox.appendChild(pasteLabel);
     pasteBox.appendChild(pasteTextarea);
+    pasteBox.appendChild(apiHint);
     pasteBox.appendChild(loadPasteBtn);
     area.appendChild(pasteBox);
 
@@ -2241,12 +2523,93 @@ class GitHubPanelExtension {
       borderRadius: '8px',
       padding: '10px',
       background: 'rgba(0,0,0,0.2)',
-      minHeight: '100px'
+      minHeight: '100px',
+      maxHeight: '520px',
+      overflowY: 'auto'
     });
+    list.classList.add('gpp-scrollable');
     this.ui.pluginsList = list;
     area.appendChild(list);
 
     return area;
+  }
+
+  _renderPluginSettings(plugin, parent) {
+    const schema = plugin._settingsSchema || [];
+    if (!schema.length) return;
+
+    const settingsWrap = document.createElement('div');
+    settingsWrap.className = 'gpp-plugin-settings';
+
+    const title = document.createElement('div');
+    title.style.fontWeight = '700';
+    title.style.fontSize = '12px';
+    title.style.opacity = '0.9';
+    title.textContent = '参数设置';
+    settingsWrap.appendChild(title);
+
+    const values = this.pluginManager.getPluginSettings(plugin.id);
+
+    schema.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'gpp-plugin-setting-row';
+
+      const label = document.createElement('label');
+      label.textContent = `${item.label || item.key} (${item.type})`;
+      row.appendChild(label);
+
+      if (item.type === 'string') {
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.value = values[item.key] ?? item.default ?? '';
+        inp.onchange = () => this.pluginManager.setPluginSetting(plugin.id, item.key, inp.value);
+        row.appendChild(inp);
+      } else if (item.type === 'number') {
+        const inp = document.createElement('input');
+        inp.type = 'number';
+        inp.value = values[item.key] ?? item.default ?? 0;
+        inp.onchange = () => this.pluginManager.setPluginSetting(plugin.id, item.key, Number(inp.value || 0));
+        row.appendChild(inp);
+      } else if (item.type === 'slider') {
+        const box = document.createElement('div');
+        box.className = 'gpp-plugin-setting-inline';
+
+        const inp = document.createElement('input');
+        inp.type = 'range';
+        inp.min = String(item.min ?? 0);
+        inp.max = String(item.max ?? 100);
+        inp.step = String(item.step ?? 1);
+        inp.value = values[item.key] ?? item.default ?? item.min ?? 0;
+        inp.style.flex = '1';
+
+        const val = document.createElement('span');
+        val.textContent = String(inp.value);
+
+        inp.oninput = () => {
+          val.textContent = String(inp.value);
+          this.pluginManager.setPluginSetting(plugin.id, item.key, Number(inp.value));
+        };
+
+        box.appendChild(inp);
+        box.appendChild(val);
+        row.appendChild(box);
+      } else if (item.type === 'choose') {
+        const sel = document.createElement('select');
+        (item.options || []).forEach(opt => {
+          const op = document.createElement('option');
+          op.value = String(opt);
+          op.textContent = String(opt);
+          sel.appendChild(op);
+        });
+        sel.value = values[item.key] ?? item.default ?? '';
+        sel.onchange = () => this.pluginManager.setPluginSetting(plugin.id, item.key, sel.value);
+        row.appendChild(sel);
+      }
+
+      settingsWrap.appendChild(row);
+    });
+
+    parent.appendChild(settingsWrap);
   }
 
   _refreshPluginsList() {
@@ -2260,34 +2623,25 @@ class GitHubPanelExtension {
 
     this.pluginManager.plugins.forEach((p, id) => {
       const row = document.createElement('div');
-      Object.assign(row.style, Utils.itemStyle());
+      row.className = 'gpp-plugin-card';
       row.style.display = 'flex';
-      row.style.justifyContent = 'space-between';
-      row.style.alignItems = 'flex-start';
+      row.style.flexDirection = 'column';
+      row.style.gap = '8px';
+
+      const top = document.createElement('div');
+      top.style.display = 'flex';
+      top.style.justifyContent = 'space-between';
+      top.style.alignItems = 'center';
+      top.style.gap = '8px';
+      top.style.flexWrap = 'wrap';
 
       const info = document.createElement('div');
-      const authorStr = p.author && p.author !== 'Unknown' ? ` <span style="color:#8af;font-size:11px">@${p.author}</span>` : '';
-      const descStr = p.description ? `<div style="font-size:11px;opacity:0.6;margin-top:4px;white-space:pre-wrap">${p.description}</div>` : '';
-      
-      // 标签显示
-      let tagsStr = '';
-      if (p.tags && p.tags.length > 0) {
-        tagsStr = `<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">` + 
-          p.tags.map(t => `<span style="font-size:10px;background:rgba(255,255,255,0.1);padding:1px 4px;border-radius:3px;opacity:0.8">${t}</span>`).join('') +
-          `</div>`;
-      }
-
-      info.innerHTML = `
-        <div><b>${p.name}</b> <span style="font-size:11px;opacity:0.7">v${p.version}</span>${authorStr}</div>
-        <div style="font-size:11px;opacity:0.5;margin-bottom:2px">ID: ${id}</div>
-        ${tagsStr}
-        ${descStr}
-      `;
+      info.innerHTML = `<b>${p.name}</b> <span style="font-size:11px;opacity:0.7">v${p.version}</span><br><span style="font-size:11px;opacity:0.5">ID: ${id}</span>`;
 
       const btnBox = document.createElement('div');
       btnBox.style.display = 'flex';
       btnBox.style.gap = '5px';
-      btnBox.style.marginLeft = '10px';
+      btnBox.style.flexWrap = 'wrap';
 
       const copyBtn = UIComponents.createWindowButton('复制源码', {
         background: 'rgba(60,160,255,0.2)'
@@ -2295,6 +2649,15 @@ class GitHubPanelExtension {
       copyBtn.onclick = () => {
         Utils.copyToClipboard(p.code);
         alert('插件源码已复制！');
+      };
+
+      const callHookBtn = UIComponents.createWindowButton('触发测试Hook');
+      callHookBtn.onclick = () => {
+        this.pluginManager.trigger('plugin:test', {
+          pluginId: id,
+          time: Date.now()
+        });
+        LoadingManager.setMessage(`已触发测试 Hook -> ${id}`);
       };
 
       const delBtn = UIComponents.createWindowButton('卸载', {
@@ -2308,10 +2671,22 @@ class GitHubPanelExtension {
       };
 
       btnBox.appendChild(copyBtn);
+      btnBox.appendChild(callHookBtn);
       btnBox.appendChild(delBtn);
 
-      row.appendChild(info);
-      row.appendChild(btnBox);
+      top.appendChild(info);
+      top.appendChild(btnBox);
+      row.appendChild(top);
+
+      const desc = document.createElement('div');
+      desc.style.fontSize = '11px';
+      desc.style.opacity = '0.72';
+      const apiCount = (p._settingsSchema || []).length;
+      desc.textContent = `插件参数数量: ${apiCount}`;
+      row.appendChild(desc);
+
+      this._renderPluginSettings(p, row);
+
       this.ui.pluginsList.appendChild(row);
     });
   }
@@ -2574,7 +2949,8 @@ class GitHubPanelExtension {
       display: 'flex',
       gap: '8px',
       marginBottom: '8px',
-      alignItems: 'center'
+      alignItems: 'center',
+      flexWrap: 'wrap'
     });
     const branchSel = document.createElement('select');
     Object.assign(branchSel.style, {
@@ -2740,7 +3116,8 @@ class GitHubPanelExtension {
       borderRadius: '6px',
       padding: '8px',
       boxSizing: 'border-box',
-      marginBottom: '6px'
+      marginBottom: '6px',
+      resize: 'vertical'
     });
 
     const prompt = document.createElement('textarea');
@@ -2754,7 +3131,8 @@ class GitHubPanelExtension {
       borderRadius: '6px',
       padding: '8px',
       boxSizing: 'border-box',
-      marginBottom: '6px'
+      marginBottom: '6px',
+      resize: 'vertical'
     });
 
     const cacheRow = document.createElement('div');
@@ -2837,6 +3215,7 @@ class GitHubPanelExtension {
       maxHeight: '220px',
       overflowY: 'auto'
     });
+    outWrap.classList.add('gpp-scrollable');
     const outPre = document.createElement('pre');
     Object.assign(outPre.style, {
       whiteSpace: 'pre-wrap',
@@ -2985,6 +3364,7 @@ class GitHubPanelExtension {
       this._loadMyRepos();
     } else if (isAI) {
       LoadingManager.setMessage('AI Ready');
+      this._refreshAIConfigUI();
       this._renderAIOutput();
       this._renderAICacheInfo();
     } else if (isPlugins) {
@@ -3369,6 +3749,7 @@ class GitHubPanelExtension {
       mainContainer.style.display = 'flex';
       mainContainer.style.flexDirection = 'column';
       mainContainer.style.height = '100%';
+      mainContainer.style.minHeight = '0';
 
       if (lastCommitInfo) {
         const anno = document.createElement('div');
@@ -3459,7 +3840,8 @@ class GitHubPanelExtension {
         display: 'flex',
         gap: '10px',
         overflow: 'hidden',
-        position: 'relative'
+        position: 'relative',
+        minHeight: '0'
       });
 
       const preWrap = document.createElement('div');
@@ -3468,8 +3850,7 @@ class GitHubPanelExtension {
         overflowY: 'auto',
         minWidth: '0'
       });
-      
-      // 源码视图
+      preWrap.classList.add('gpp-scrollable');
       const pre = document.createElement('pre');
       Object.assign(pre.style, {
         whiteSpace: 'pre-wrap',
@@ -3477,19 +3858,7 @@ class GitHubPanelExtension {
         fontSize: '13px',
         margin: 0
       });
-      
-      // Markdown 预览视图 (独立容器)
-      const mdView = document.createElement('div');
-      Object.assign(mdView.style, {
-        display: 'none',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        lineHeight: '1.5',
-        fontSize: '14px',
-        color: '#eee'
-      });
-
       preWrap.appendChild(pre);
-      preWrap.appendChild(mdView);
       contentBox.appendChild(preWrap);
 
       const textarea = document.createElement('textarea');
@@ -3532,6 +3901,7 @@ class GitHubPanelExtension {
         transition: 'width 0.3s',
         flexShrink: '0'
       });
+      transPanel.classList.add('gpp-scrollable');
       const transTitle = document.createElement('div');
       transTitle.innerHTML = `<b>翻译结果</b>`;
       const transContent = document.createElement('pre');
@@ -3554,7 +3924,6 @@ class GitHubPanelExtension {
         saveBtn,
         editBtn,
         pre,
-        mdView, // Add reference
         transPanel,
         transContent
       };
@@ -3576,22 +3945,16 @@ class GitHubPanelExtension {
       if (ext === 'md' || file.name.toLowerCase() === 'readme') {
         mdToggleBtn.style.display = 'inline-block';
         this.core.isMarkdownPreview = true;
-        
-        // 默认显示预览
-        pre.style.display = 'none';
-        mdView.style.display = 'block';
-        mdView.innerHTML = Utils.parseMarkdown(text, this.core.currentOwner, this.core.currentRepo, this.core.currentBranch);
-        
+        pre.innerHTML = Utils.parseMarkdown(text, this.core.currentOwner, this.core.currentRepo, this.core.currentBranch);
+        pre.style.whiteSpace = 'normal';
         mdToggleBtn.onclick = () => {
           this.core.isMarkdownPreview = !this.core.isMarkdownPreview;
           if (this.core.isMarkdownPreview) {
-            pre.style.display = 'none';
-            mdView.style.display = 'block';
-            mdView.innerHTML = Utils.parseMarkdown(text, this.core.currentOwner, this.core.currentRepo, this.core.currentBranch);
+            pre.innerHTML = Utils.parseMarkdown(text, this.core.currentOwner, this.core.currentRepo, this.core.currentBranch);
+            pre.style.whiteSpace = 'normal';
           } else {
-            mdView.style.display = 'none';
-            pre.style.display = 'block';
             pre.textContent = text;
+            pre.style.whiteSpace = 'pre-wrap';
           }
         };
       } else {
@@ -3789,6 +4152,7 @@ class GitHubPanelExtension {
         overflowY: 'auto',
         color: '#fff'
       });
+      card.classList.add('gpp-scrollable');
 
       card.innerHTML = `<h3>文件贡献热力图: ${path.split('/').pop()}</h3>`;
 
@@ -3909,8 +4273,8 @@ class GitHubPanelExtension {
       this.ui.btnMinimize.textContent = '□';
       this.ui._panelBody.style.display = 'none';
     } else {
-      s.width = '720px';
-      s.height = '740px';
+      if (s.width === '100vw') s.width = '720px';
+      if (s.height === '100vh' || parseInt(s.height) < 420) s.height = '740px';
       s.borderRadius = '12px';
       this.ui.btnMinimize.textContent = '_';
       this.ui.btnFullscreen.textContent = '□';
@@ -3995,7 +4359,7 @@ class GitHubPanelExtension {
       keyInp.style.flex = '1';
       keyInp.onchange = () => {
         this.core.siliconKey = keyInp.value;
-        this.updateAIConfig();
+        this.core.updateAIConfig();
       };
       const sfModels = ['deepseek-ai/DeepSeek-R1-0528-Qwen3-8B', 'Qwen/Qwen2.5-Coder-7B-Instruct', 'THUDM/glm-4-9b-chat', 'internlm/internlm2_5-7b-chat', 'custom'];
       const modelSel = Utils.select(sfModels, '模型');
@@ -4056,7 +4420,7 @@ class GitHubPanelExtension {
       urlInp.style.flex = '2';
       urlInp.onchange = () => {
         this.core.customAI.url = urlInp.value;
-        this.updateAIConfig();
+        this.core.updateAIConfig();
       };
       const keyInp = Utils.input('API Key');
       keyInp.value = this.core.customAI.key;
@@ -4064,14 +4428,14 @@ class GitHubPanelExtension {
       keyInp.style.flex = '1';
       keyInp.onchange = () => {
         this.core.customAI.key = keyInp.value;
-        this.updateAIConfig();
+        this.core.updateAIConfig();
       };
       const modInp = Utils.input('Model Name');
       modInp.value = this.core.customAI.model;
       modInp.style.flex = '1';
       modInp.onchange = () => {
         this.core.customAI.model = modInp.value;
-        this.updateAIConfig();
+        this.core.updateAIConfig();
       };
       r1.appendChild(urlInp);
       r1.appendChild(keyInp);
@@ -4118,7 +4482,7 @@ class GitHubPanelExtension {
       await this.core.aiManager.stream([{
         role: 'user',
         content: String(prompt)
-      }], (chunk) => {
+      }], () => {
         this._renderAIOutput();
       });
 
@@ -4149,7 +4513,7 @@ class GitHubPanelExtension {
       }, {
         role: 'user',
         content: String(prompt)
-      }], (chunk) => {
+      }], () => {
         this._renderAIOutput();
       });
 
@@ -4241,6 +4605,8 @@ class GitHubPanelExtension {
               this.core.cacheManager.repoCacheMeta.files += 1;
               this.core.cacheManager.repoCacheMeta.bytes += text.length;
               this.core.cacheManager.repoCacheMeta.t = Date.now();
+              this.core.cacheManager.repoCacheMeta.owner = this.core.currentOwner;
+              this.core.cacheManager.repoCacheMeta.repo = this.core.currentRepo;
 
               this._renderAICacheInfo();
             } catch (e) {
@@ -4250,6 +4616,8 @@ class GitHubPanelExtension {
         }
       };
 
+      this.core.cacheManager.repoCacheMeta.owner = this.core.currentOwner;
+      this.core.cacheManager.repoCacheMeta.repo = this.core.currentRepo;
       await walk('');
       LoadingManager.setMessage('仓库递归读取完成' + (this.core.cacheManager.repoCacheMeta.truncated ? '（已截断）' : ''));
     } catch (e) {
@@ -4298,8 +4666,10 @@ class GitHubPanelExtension {
       overflowY: 'auto',
       border: '1px solid #444',
       margin: '10px 0',
-      padding: '5px'
+      padding: '5px',
+      minHeight: '300px'
     });
+    listWrap.classList.add('gpp-scrollable');
 
     const files = Array.from(this.core.cacheManager.repoTextCache.entries())
       .filter(e => e[1].type === 'file')
@@ -4482,7 +4852,8 @@ class GitHubPanelExtension {
       marginTop: '10px',
       background: '#333',
       color: '#fff',
-      border: '1px solid #555'
+      border: '1px solid #555',
+      resize: 'vertical'
     });
     panel.appendChild(reqInp);
 
@@ -4506,6 +4877,7 @@ class GitHubPanelExtension {
       whiteSpace: 'pre-wrap',
       color: '#fff'
     });
+    outWrap.classList.add('gpp-scrollable');
     panel.appendChild(outWrap);
 
     const actionRow = document.createElement('div');
@@ -4573,7 +4945,7 @@ class GitHubPanelExtension {
       } else {
         this.core.siliconModel = modelInp.value;
       }
-      this.updateAIConfig();
+      this.core.updateAIConfig();
 
       try {
         await this.core.aiManager.stream([{
@@ -4593,7 +4965,7 @@ class GitHubPanelExtension {
         } else {
           this.core.siliconModel = oldModel;
         }
-        this.updateAIConfig();
+        this.core.updateAIConfig();
       }
     };
 
@@ -4874,7 +5246,8 @@ class GitHubPanelExtension {
       height: '200px',
       background: 'rgba(0,0,0,0.3)',
       color: '#fff',
-      border: '1px solid #555'
+      border: '1px solid #555',
+      resize: 'vertical'
     });
 
     const btn = UIComponents.createWindowButton('Commit');
@@ -5293,8 +5666,7 @@ class GitHubPanelExtension {
       preWrap,
       textarea,
       saveBtn,
-      editBtn,
-      pre
+      editBtn
     } = this.ui.fileViewRefs;
 
     if (this.core.isEditMode) {
@@ -5349,3 +5721,4 @@ class GitHubPanelExtension {
 // ==================== 注册扩展 ====================
 
 Scratch.extensions.register(new GitHubPanelExtension());
+
