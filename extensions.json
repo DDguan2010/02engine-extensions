@@ -849,6 +849,26 @@
                 }
             ],
             "docs": false
+        },
+        {
+            "slug": "panel",
+            "id": "panel",
+            "name": "panel",
+            "description": "panel",
+            "nameTranslations": {
+                "zh-cn": "panel",
+            },
+            "descriptionTranslations": {
+                "zh-cn": "panel",
+            },
+            "image": "panel.png",
+            "by": [
+                {
+                "name": "yuan",
+                "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
+                }
+            ],
+            "docs": false
         }
     ]
 }
