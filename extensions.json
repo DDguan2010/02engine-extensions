@@ -759,7 +759,7 @@
           "id": "github面板",
           "name": "github面板",
           "description": "github面板。",
-          "image": "GitHub面板.png",
+          "image": "GitHub面板.jpg",
           "by": [
             {
               "name": "yuan",
@@ -793,7 +793,7 @@
             "nameTranslations": {
                 "zh-cn": "寻路"
             },
-            "image": "寻路.png",
+            "image": "寻路.jpg",
             "by": [
                 {
                 "name": "yuan",
@@ -825,6 +825,51 @@
                     "link": "https://chessbrain.qzz.io/"
                 }
             ],
+            "docs": false
+        },
+        {
+            "slug": "调试器",
+            "id": "DebuggerExtensionTS",
+            "name": "调试器",
+            "description": "调试器",
+            "nameTranslations": {
+                "zh-cn": "调试器"
+            },
+            "descriptionTranslations": {
+                "zh-cn": "调试器"
+            },
+            "image": "调试器.png",
+            "by": [
+                {
+                    "name": "TheShovle"
+                },
+                {
+                "name": "yuan",
+                "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
+                }
+            ],
+            "scratchCompatible": false,
+            "docs": false
+        },
+        {
+            "slug": "panel",
+            "id": "settingspanel",
+            "name": "panel",
+            "description": "panel",
+            "nameTranslations": {
+                "zh-cn": "panel"
+            },
+            "descriptionTranslations": {
+                "zh-cn": "panel"
+            },
+            "image": "panel.svg",
+            "by": [
+                {
+                "name": "yuan",
+                "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
+                }
+            ],
+            "scratchCompatible": false,
             "docs": false
         }
     ]
