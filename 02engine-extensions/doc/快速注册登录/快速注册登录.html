@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Turbowarp 快速注册/登录扩展积木说明</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;}
+body{background:#fff;color:#000;line-height:1.6;padding:24px 8vw;}
+h1{font-size:2rem;margin-bottom:16px;font-weight:700;color:#000;}
+h2{font-size:1.4rem;margin:32px 0 12px;color:#000;}
+p{margin-bottom:8px;color:#000;}
+ul{list-style:none;margin-left:0;}
+li{padding:12px 16px;margin-bottom:12px;background:#f5f5f5;border-radius:16px;display:flex;align-items:center;gap:12px;transition:transform .15s;}
+li:hover{transform:scale(1.01);}
+.block-name{font-weight:600;font-size:1.05rem;color:#000;}
+.block-type{padding:4px 10px;border-radius:20px;font-size:.75rem;font-weight:500;color:#000;background:#ddd;}
+@media(max-width:600px){
+  h1{font-size:1.5rem;}
+  li{flex-direction:column;align-items:flex-start;}
+}
+img{width:100%;}
+</style>
+<script>
+document.addEventListener('click',function(e){
+  const a=e.target.closest('a');
+  if(!a||a.tagName!=='A')return;
+  const href=a.getAttribute('href');
+  if(!href||!href.startsWith('#'))return;
+  e.preventDefault();e.stopPropagation();
+  const targetId=href.substring(1);
+  if(targetId){
+    const element=document.getElementById(targetId);
+    if(element){element.scrollIntoView({behavior:'smooth'});}
+  }
+});
+</script>
+<script>
+window.onload=function(){
+  if(document.body.childElementCount===1){
+    const scale=document.documentElement.clientWidth/(document.body.children[0].clientWidth+32);
+    if(scale<1){
+      document.body.style.transform=`scale(${scale})`;
+      document.body.style.transformOrigin='left top';
+    }
+  }
+}
+</script>
+</head>
+<body>
+<h1>Turbowarp扩展：快速注册/登录 积木说明</h1>
+<h2>扩展内积木列表与说明</h2>
+<ul>
+  <li>
+    <span class="block-name">在舞台上显示登录界面</span>
+    <span class="block-type">积木</span>
+    <p>弹出登录界面，含用户名和密码输入框。再次调用会复用同一界面。</p>
+  </li>
+  <li>
+    <span class="block-name">登录用户名？</span>
+    <span class="block-type">字符串</span>
+    <p>返回登录界面里当前填写的用户名。</p>
+  </li>
+  <li>
+    <span class="block-name">登录密码？</span>
+    <span class="block-type">字符串</span>
+    <p>返回登录界面里当前填写的密码。</p>
+  </li>
+  <li>
+    <span class="block-name">关闭登录界面</span>
+    <span class="block-type">积木</span>
+    <p>隐藏并销毁登录界面；再次显示会重新创建。</p>
+  </li>
+  <li>
+    <span class="block-name">登录界面按下确定键？</span>
+    <span class="block-type">布尔值</span>
+    <p>用户点击“确定”后返回true，随后自动复位为false；用于检测提交动作。</p>
+  </li>
+  <li>
+    <span class="block-name">在舞台上显示注册界面</span>
+    <span class="block-type">积木</span>
+    <p>弹出注册界面，含用户名、密码及确认密码输入框。密码不一致会弹窗提示并清空密码栏。</p>
+  </li>
+  <li>
+    <span class="block-name">注册用户名？</span>
+    <span class="block-type">字符串</span>
+    <p>返回注册界面里当前填写的用户名。</p>
+  </li>
+  <li>
+    <span class="block-name">注册密码？</span>
+    <span class="block-type">字符串</span>
+    <p>返回注册界面里当前填写的密码。</p>
+  </li>
+  <li>
+    <span class="block-name">关闭注册界面</span>
+    <span class="block-type">积木</span>
+    <p>隐藏并销毁注册界面；再次显示会重新创建。</p>
+  </li>
+  <li>
+    <span class="block-name">提示（注册/登陆成功）</span>
+    <span class="block-type">积木</span>
+    <p>弹出消息，显示括号中的信息。默认消息为“注册/登陆成功”。可用于告知用户结果。</p>
+  </li>
+  <li>
+    <span class="block-name">注册界面按下确定键？</span>
+    <span class="block-type">布尔值</span>
+    <p>用户点击“确定”且密码校验通过后返回true，随后自动复位为false；用于检测注册提交动作。</p>
+  </li>
+  <li>
+    <span class="block-name">将（） 以 （） 分割，取第 （） 段</span>
+    <span class="block-type">注册/登陆成功</span>
+    <p>按分隔符分割文本并返回指定索引片段（从1开始），如果不存在就返回空字符串。</p>
+  </li>
+</ul>
+</body>
+</html>

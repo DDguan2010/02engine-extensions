@@ -871,6 +871,20 @@
             ],
             "scratchCompatible": false,
             "docs": false
+        },
+        {
+            "slug": "素数拓展",
+            "id": "素数拓展",
+            "name": "素不相识：素数相关返回值拓展",
+            "description": "与素数打交道的实用工具包，判断、查找、计算一站式搞定！",
+            "image": "素数拓展.png",
+            "by": [
+                {
+                    "name": "罴罴",
+                    "link": "https://space.bilibili.com/3632319223040611"
+                }
+            ],
+            "docs": false
         }
     ]
 }

@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>A*寻路（astarPathfindingTW）扩展文档</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#121a24; --text:#e8eef7; --muted:#a7b3c6;
+      --line:rgba(255,255,255,.12); --accent:#4B8BBE; --accent2:#2dd4ff;
+      --warn:#ff9f1a; --ok:#34d399; --bad:#f87171;
+      --code:#0a0f16;
+    }
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans","PingFang SC","Microsoft YaHei",sans-serif;
+      background:linear-gradient(180deg,var(--bg),#0b1320);color:var(--text);line-height:1.6}
+    header{padding:28px 20px 18px;border-bottom:1px solid var(--line);background:rgba(0,0,0,.12)}
+    header h1{margin:0 0 6px;font-size:22px}
+    header p{margin:0;color:var(--muted)}
+    main{max-width:1020px;margin:0 auto;padding:18px 16px 48px}
+    section{background:rgba(18,26,36,.66);border:1px solid var(--line);border-radius:12px;padding:16px 16px 10px;margin:14px 0}
+    h2{margin:0 0 10px;font-size:18px}
+    h3{margin:14px 0 8px;font-size:15px;color:#d7e6ff}
+    code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+    .pill{display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:12px}
+    table{width:100%;border-collapse:collapse;margin:8px 0 12px}
+    th,td{border:1px solid var(--line);padding:8px 10px;vertical-align:top}
+    th{background:rgba(75,139,190,.14);text-align:left}
+    a{color:var(--accent2);text-decoration:none}
+    a:hover{text-decoration:underline}
+    .ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+    .note{color:var(--muted);font-size:13px}
+    .kbd{font:inherit;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 6px;background:rgba(255,255,255,.04)}
+    footer{max-width:1020px;margin:0 auto;padding:0 16px 22px;color:var(--muted);font-size:12px}
+  </style>
+</head>
+<body>
+<header>
+  <h1>A*寻路（astarPathfindingTW）扩展文档</h1>
+  <p>适用于 Scratch / TurboWarp 扩展环境。支持：单段路径、必经点（最多5个）、规划算法（平衡/准确/迅速/贪婪/双向）与示意图编辑查看。</p>
+  <div style="margin-top:10px">
+    <span class="pill">网格4方向</span>
+    <span class="pill">路径输出 w/a/s/d</span>
+    <span class="pill">可分步计算</span>
+    <span class="pill">示意图支持 + / - 缩放按钮</span>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>1. 扩展概览</h2>
+    <p>本扩展用于在<strong>二维网格地图</strong>上进行寻路，并可设置<strong>起点</strong>、<strong>终点</strong>和<strong>必经点</strong>。扩展输出的路径是一串方向字符：</p>
+    <ul>
+      <li><code>w</code>：向上（y-1）</li>
+      <li><code>s</code>：向下（y+1）</li>
+      <li><code>a</code>：向左（x-1）</li>
+      <li><code>d</code>：向右（x+1）</li>
+    </ul>
+    <p class="note">坐标系按数组方式：左上角为(0,0)，x向右增大，y向下增大。</p>
+  </section>
+
+  <section>
+    <h2>2. 地图模型（建图内容 C）</h2>
+    <p>地图由 <code>W</code>（宽）× <code>L</code>（长/高）组成，<code>C</code> 是一段字符串（长度至少为 W*L，短了会把缺失部分当墙）。</p>
+    <ul>
+      <li><code>'0'</code>：可通行</li>
+      <li>非 <code>'0'</code>（例如 <code>'1'</code>）：障碍/墙</li>
+    </ul>
+
+    <h3>2.1 示例：10×10 全通行</h3>
+    <pre><code>W=10, L=10
+C="0000000000".repeat(10)</code></pre>
+
+    <h3>2.2 示例：带墙</h3>
+    <pre><code>// 5x5 示例（每行5个字符，共5行，最终拼成一段）
+00000
+01110
+01010
+01110
+00000</code></pre>
+    <p class="note">你在输入 <code>C</code> 时可以直接把多行拼接成一行字符串；扩展内部按索引读取。</p>
+  </section>
+
+  <section>
+    <h2>3. 主要积木（Blocks）说明</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:240px">积木</th>
+          <th>说明</th>
+          <th style="width:220px">输出/效果</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>建图 地图名为[name]长[L] 宽[W] 内容[C]</code></td>
+          <td>创建/覆盖地图。会清空必经点与缓存，并重置示意图视图参数。</td>
+          <td>更新内部网格数据</td>
+        </tr>
+        <tr>
+          <td><code>起始 地图名为[name]的x[X] y[Y]</code></td>
+          <td>设置起点坐标。会清空缓存。</td>
+          <td>更新起点</td>
+        </tr>
+        <tr>
+          <td><code>终止 地图名为[name]的x[X] y[Y]</code></td>
+          <td>设置终点坐标。会清空缓存。</td>
+          <td>更新终点</td>
+        </tr>
+        <tr>
+          <td><code>添加必经点 地图名为[name]的x[X] y[Y]</code></td>
+          <td>添加一个必经点（最多5个）。坐标重复则覆盖（不会增加数量）。</td>
+          <td>更新必经点集合</td>
+        </tr>
+        <tr>
+          <td><code>删去必经点 地图名为[name] x[X] y[Y]</code></td>
+          <td>删除指定坐标的必经点。</td>
+          <td>更新必经点集合</td>
+        </tr>
+        <tr>
+          <td><code>寻路 地图名为[name] 规划算法[ALG]</code></td>
+          <td>设置规划算法（影响必经点顺序规划与寻路权重/策略）。</td>
+          <td>更新算法配置</td>
+        </tr>
+        <tr>
+          <td><code>寻路 地图名为[name] 路径算法[PATH_ALG]</code></td>
+          <td>当前菜单仅提供 A*（保留扩展接口）。</td>
+          <td>更新路径算法字段</td>
+        </tr>
+        <tr>
+          <td><code>画出地图 地图名为[name]的示意图[MODE]</code></td>
+          <td>弹出右下角示意图窗口。<code>MODE</code> 可选“可编辑/仅查看”。支持拖拽平移、滚轮缩放、触控双指缩放；并新增工具栏 <strong>+</strong>/<strong>-</strong> 缩放按钮。</td>
+          <td>显示窗口</td>
+        </tr>
+        <tr>
+          <td><code>计算路程</code></td>
+          <td>尝试在约2.5秒内完成计算并返回整条路径字符串；超时或无解返回 <code>-1</code>。</td>
+          <td>返回路径或 <code>-1</code></td>
+        </tr>
+        <tr>
+          <td><code>计算一步最优解</code></td>
+          <td>分步计算：每次调用在时间片内推进搜索。未完成返回 <code>none</code>；完成后按顺序逐字符返回路径；结束返回 <code>-1</code>。</td>
+          <td>返回 <code>w/a/s/d</code> 或 <code>none</code> 或 <code>-1</code></td>
+        </tr>
+        <tr>
+          <td><code>建图模型</code></td>
+          <td>返回带标记的可视化文本（换行）：
+            <ul class="note">
+              <li><code>0</code> 通路，<code>1</code> 墙</li>
+              <li><code>3</code> 起点，<code>4</code> 终点，<code>5</code> 必经点</li>
+            </ul>
+          </td>
+          <td>返回字符串或 <code>-1</code></td>
+        </tr>
+        <tr>
+          <td><code>估计进度</code></td>
+          <td>返回当前规划/搜索进度文本（例如“预处理 40%”、“搜索 20%”、“构建 80%”）。</td>
+          <td>返回百分比文本</td>
+        </tr>
+        <tr>
+          <td><code>*寻路地图名为[name]*</code></td>
+          <td>直接触发计算（不返回值）。</td>
+          <td>更新缓存与进度</td>
+        </tr>
+        <tr>
+          <td><code>寻路地图名为[name]并且把结果填充到内置列表中</code></td>
+          <td>计算后将路径逐字符填充到扩展内置列表（无解则列表首项为 <code>-1</code>）。</td>
+          <td>更新内置列表</td>
+        </tr>
+        <tr>
+          <td><code>内置列表的项目数</code></td>
+          <td>返回内置列表长度。</td>
+          <td>整数</td>
+        </tr>
+        <tr>
+          <td><code>内置列表的([I])项</code></td>
+          <td>返回第 I 项（从1开始）。越界返回空字符串。</td>
+          <td>字符/空串</td>
+        </tr>
+        <tr>
+          <td><code>设定精确k值为[K]</code></td>
+          <td>平衡模式下：必经点数量 ≤ K 时优先走“精确”（动态规划），否则走“贪心”。</td>
+          <td>更新阈值</td>
+        </tr>
+        <tr>
+          <td><code>设定一步计算时间片ms为[MS]</code></td>
+          <td>影响“计算一步最优解”的单次推进时间。</td>
+          <td>更新时间片</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>4. 规划算法（ALG）菜单含义</h2>
+    <div class="grid">
+      <div>
+        <h3>平衡（balanced）</h3>
+        <ul>
+          <li>必经点数量 ≤ K：使用“精确”规划（BFS预处理 + DP 旅行商式顺序）</li>
+          <li>必经点数量 > K：使用“贪心”规划（按曼哈顿距离选下一个点）</li>
+          <li>单段寻路使用 A* 权重=1.0</li>
+        </ul>
+      </div>
+      <div>
+        <h3>准确（accurate）</h3>
+        <ul>
+          <li>强制“精确”规划（耗时较高）</li>
+          <li>单段寻路 A* 权重=1.0</li>
+        </ul>
+      </div>
+      <div>
+        <h3>迅速（fast）</h3>
+        <ul>
+          <li>“贪心”规划</li>
+          <li>单段寻路 A* 权重=1.5（更快但可能非最短）</li>
+          <li>可能不是最短路径</li>
+        </ul>
+      </div>
+      <div>
+        <h3>贪婪迅速（greedy_fast）</h3>
+        <ul>
+          <li>“贪心”规划</li>
+          <li>单段寻路 A* 权重=5.0（很快但更偏贪婪）</li>
+          <li>可能不是最短路径</li>
+        </ul>
+      </div>
+      <div>
+        <h3>双向贪婪迅速（bidirectional_fast）</h3>
+        <ul>
+          <li>“贪心”规划</li>
+          <li>单段寻路采用双向搜索（权重=1.5）</li>
+          <li>可能不是最短路径</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note"><strong>提示</strong>：当地图大、障碍多、必经点多时，“准确/精确”模式的预处理与DP可能较慢。</p>
+  </section>
+
+  <section>
+    <h2>5. 示意图窗口使用说明（drawMap）</h2>
+    <h3>5.1 工具栏</h3>
+    <ul>
+      <li><strong>运行</strong>：清缓存后立即计算路径并绘制</li>
+      <li><strong>+</strong>：放大（缩放比例 +0.25，上限 10）</li>
+      <li><strong>-</strong>：缩小（缩放比例 -0.25，下限 0.2）</li>
+      <li><strong>重置视图</strong>：缩放恢复 100%，平移归零</li>
+      <li><strong>清除路径</strong>：只清缓存与路径显示，不改地图</li>
+    </ul>
+
+    <h3>5.2 查看/编辑模式</h3>
+    <ul>
+      <li>仅查看：拖拽画布平移（或选择“移动”工具）</li>
+      <li>可编辑：可用调色板修改格子、设置起点/终点/必经点</li>
+    </ul>
+
+    <h3>5.3 操作方式</h3>
+    <ul>
+      <li>鼠标滚轮：缩放</li>
+      <li>拖拽：平移或绘制（取决于模式/工具）</li>
+      <li>触控双指：缩放</li>
+      <li>窗口标题栏拖拽：移动窗口位置</li>
+    </ul>
+
+    <p class="note">示意图颜色：绿色为通路，红色为障碍；蓝色方块为起点，紫色方块为终点，橙色圆点为必经点，路径为蓝色线条。</p>
+  </section>
+
+  <section>
+    <h2>6. 典型使用流程（Scratch 脚本思路）</h2>
+    <h3>6.1 一次性计算整条路径</h3>
+    <pre><code>建图(map1, L=20, W=20, C=...)
+起始(map1, 0, 0)
+终止(map1, 19, 19)
+添加必经点(map1, 5, 5)
+添加必经点(map1, 10, 10)
+寻路(map1, 规划算法=平衡)
+
+设置 变量route 为 (计算路程)
+如果 &lt;route = "-1"&gt; 那么
+  // 无解
+否则
+  // 按 route 字符串逐步移动角色</code></pre>
+
+    <h3>6.2 分步计算（避免卡顿）</h3>
+    <pre><code>设定一步计算时间片ms为 30
+重复执行
+  设置 step 为 (计算一步最优解)
+  如果 &lt;step = "none"&gt; 那么
+    // 还在算，下一帧继续
+  否则如果 &lt;step = "-1"&gt; 那么
+    // 无解 或 已走完
+    停止
+  否则
+    // step 是 w/a/s/d
+    // 执行一步移动
+结束</code></pre>
+  </section>
+
+  <section>
+    <h2>7. 常见问题（FAQ）</h2>
+    <h3>7.1 为什么返回 -1？</h3>
+    <ul>
+      <li>起点/终点在墙上</li>
+      <li>无连通路径</li>
+      <li>计算路程超时（2.5秒仍未完成）</li>
+    </ul>
+
+    <h3>7.2 为什么“计算一步最优解”会返回 none？</h3>
+    <p>表示本次时间片内还没算完，需要下一次调用继续推进。</p>
+
+    <h3>7.3 必经点最多几个？</h3>
+    <p>最多 5 个（超过会被忽略）。</p>
+
+    <h3>7.4 “平衡”的 K 值有什么意义？</h3>
+    <p>K 越大越倾向精确（更慢但顺序更优），K 越小越倾向贪心（更快但可能不是最短总路程）。</p>
+  </section>
+
+  <section>
+    <h2>8. 返回值/状态约定</h2>
+    <table>
+      <thead>
+        <tr><th>接口</th><th>可能返回</th><th>含义</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>计算路程</code></td>
+          <td><span class="ok">路径字符串</span> / <span class="bad">-1</span></td>
+          <td>成功返回完整路径；失败或超时返回 -1</td>
+        </tr>
+        <tr>
+          <td><code>计算一步最优解</code></td>
+          <td><span class="ok">w/a/s/d</span> / <span class="warn">none</span> / <span class="bad">-1</span></td>
+          <td>单步指令 / 未完成 / 无解或已结束</td>
+        </tr>
+        <tr>
+          <td><code>估计进度</code></td>
+          <td>例如 <code>预处理 20%</code>、<code>规划 55%</code>、<code>构建 90%</code></td>
+          <td>用于UI显示</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>
