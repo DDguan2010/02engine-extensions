@@ -1,6 +1,28 @@
 {
     "extensions": [
         {
+            "slug": "cbeg",
+            "id": "cbeg",
+            "name": "CB ExtGallary",
+            "description": "CB Extension Gallery —— Best tool for make your Scratch Extension.",
+            "descriptionTranslations": {
+                "zh-cn": "CB Extension Gallery —— 轻量实用的 Scratch 扩展制作工具。",
+                "en": "CB Extension Gallery —— Best tool for make your Scratch Extension."
+            },
+            "nameTranslations": {
+                "zh-cn": "CB ExtGallary",
+                "en": "CB Extension Gallary"
+            },
+            "image": "cbeg.png",
+            "by": [
+                {
+                    "name": "ChessBrainIsNotHuman",
+                    "link": "https://chessbrain.qzz.io/"
+                }
+            ],
+            "docs": false
+        },
+        {
             "slug": "kylin",
             "id": "kylin",
             "name": "kylin",
@@ -493,6 +515,28 @@
             "license": "AGPL 3.0"
         },
         {
+            "slug": "musicplus",
+            "id": "musicplus",
+            "name": "音乐 +",
+            "description": "升级版音乐扩展",
+            "nameTranslations": {
+                "zh-cn": "音乐 +",
+                "en": "Music Plus"
+            },
+            "descriptionTranslations": {
+                "zh-cn": "升级版音乐扩展",
+                "en": "Music extension, but advanced!"
+            },
+            "image": "musicplus.png",
+            "by": [
+                {
+                    "name": "ChessBrainIsNotHuman",
+                    "link": "https://chessbrain.qzz.io/"
+                }
+            ],
+            "docs": false
+        },
+        {
             "slug": "3d-basicrt",
             "id": "3d-basicrt",
             "name": "3d-basicrt",
@@ -759,7 +803,7 @@
           "id": "github面板",
           "name": "github面板",
           "description": "github面板。",
-          "image": "GitHub面板.jpg",
+          "image": "GitHub面板.png",
           "by": [
             {
               "name": "yuan",
@@ -793,7 +837,7 @@
             "nameTranslations": {
                 "zh-cn": "寻路"
             },
-            "image": "寻路.jpg",
+            "image": "寻路.png",
             "by": [
                 {
                 "name": "yuan",
@@ -804,73 +848,6 @@
             "samples": [
                 "寻路"
             ]
-        },
-        {
-            "slug": "musicplus",
-            "id": "musicplus",
-            "name": "音乐 +",
-            "description": "升级版音乐扩展",
-            "nameTranslations": {
-                "zh-cn": "音乐 +",
-                "en": "Music Plus"
-            },
-            "descriptionTranslations": {
-                "zh-cn": "升级版音乐扩展",
-                "en": "Music extension, but advanced!"
-            },
-            "image": "musicplus.png",
-            "by": [
-                {
-                    "name": "ChessBrainIsNotHuman",
-                    "link": "https://chessbrain.qzz.io/"
-                }
-            ],
-            "docs": false
-        },
-        {
-            "slug": "调试器",
-            "id": "DebuggerExtensionTS",
-            "name": "调试器",
-            "description": "调试器",
-            "nameTranslations": {
-                "zh-cn": "调试器"
-            },
-            "descriptionTranslations": {
-                "zh-cn": "调试器"
-            },
-            "image": "调试器.png",
-            "by": [
-                {
-                    "name": "TheShovle"
-                },
-                {
-                "name": "yuan",
-                "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
-                }
-            ],
-            "scratchCompatible": false,
-            "docs": false
-        },
-        {
-            "slug": "panel",
-            "id": "settingspanel",
-            "name": "panel",
-            "description": "panel",
-            "nameTranslations": {
-                "zh-cn": "panel"
-            },
-            "descriptionTranslations": {
-                "zh-cn": "panel"
-            },
-            "image": "panel.svg",
-            "by": [
-                {
-                "name": "yuan",
-                "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
-                }
-            ],
-            "scratchCompatible": false,
-            "docs": false
         }
     ]
 }
