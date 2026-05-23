@@ -1,5 +1,7 @@
+// ==TurboWarp==
 // @name WitCatMarkDown
-// @description 白猫的markdown / Make your text box more colorful (Optimized Version)
+// @version 1.2.0
+// @description 更优雅的文本框 / Make your text box more colorful (支持动态解析规则)
 // @homepage https://www.ccw.site/student/6173f57f48cf8f4796fc860e
 // @author 白猫 @ CCW
 // ==/TurboWarp==
@@ -8,80 +10,10 @@
   'use strict';
 
   /* eslint-disable */
-  
-  // 工具函数：防抖 (Debounce)
-  function _debounce(func, wait) {
-    let timeout;
-    return function(...args) {
-      const context = this;
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func.apply(context, args), wait);
-    };
-  }
-
-  // 工具函数：节流 (Throttle)
-  function _throttle(func, limit) {
-    let inThrottle;
-    return function() {
-      const args = arguments;
-      const context = this;
-      if (!inThrottle) {
-        func.apply(context, args);
-        inThrottle = true;
-        setTimeout(() => inThrottle = false, limit);
-      }
-    }
-  }
-
-  // ==================== Markdown解析器部分 ====================
+  // ==================== Markdown 解析器部分（增强版） ====================
   let markdownExpose = {};
 
   (function () {
-    
-    // 初始化自定义规则数组
-    markdownExpose.customRules = [];
-
-    // ======== 解析管线（固定解析 + 自定义规则）========
-    markdownExpose.pipeline = [
-      { id: 'normalizeNewlines', name: '换行规范化(\\r\\n/\\r -> \\n, \\n转义)', enabled: true },
-      { id: 'protectHtmlBlock', name: '[html]块保护(把块内\\n替换为\\uE000)', enabled: true },
-      { id: 'protectRowspan', name: '表格Rowspan保护(^^ -> \\uE001)', enabled: true },
-      { id: 'customRules', name: '自定义规则(可多条)', enabled: true },
-      { id: 'builtinHighlight', name: '内置高亮(==text== -> <mark>)', enabled: true },
-      { id: 'builtinSup', name: '内置上标(^text^ -> <sup>)', enabled: true },
-      { id: 'builtinSub', name: '内置下标(~text~ -> <sub>)', enabled: true },
-      { id: 'restoreRowspan', name: '还原Rowspan(\\uE001 -> ^^)', enabled: true },
-      { id: 'autoLineBreak', name: '自动换行(单\\n -> 两空格+\\n)', enabled: true }
-    ];
-
-    // 允许从 localStorage 恢复顺序
-    try {
-      const saved = localStorage.getItem('WitCatMarkDown_pipeline');
-      if (saved) {
-        const arr = JSON.parse(saved);
-        if (Array.isArray(arr) && arr.length) {
-          const map = new Map(markdownExpose.pipeline.map(x => [x.id, x]));
-          const merged = [];
-          arr.forEach(item => { 
-            let id = typeof item === 'string' ? item : item.id;
-            let enabled = typeof item === 'object' ? item.enabled : true;
-            if (map.has(id)) {
-              let step = map.get(id);
-              step.enabled = enabled;
-              merged.push(step);
-            }
-          });
-          markdownExpose.pipeline.forEach(x => { if (!merged.includes(x)) merged.push(x); });
-          markdownExpose.pipeline = merged;
-        }
-      }
-    } catch (e) {}
-
-    function CloseTag(len) {
-      this.len_after = len;
-      this.name = "close";
-    }
-
     var Markdown = (markdownExpose.Markdown = function (dialect) {
       switch (typeof dialect) {
         case "undefined":
@@ -100,7 +32,6 @@
       }
       this.em_state = [];
       this.strong_state = [];
-      this.underline_state = []; 
       this.debug_indent = "";
     });
 
@@ -108,89 +39,6 @@
       var md = new Markdown(dialect);
       return md.toTree(source);
     };
-     
-    const regexProtectHtml = /\[html\]([\s\S]*?)\[\/html\]/gi;
-    const regexRowspan = /\^\^/g;
-    const regexHighlight = /==([\s\S]+?)==/g;
-    const regexSup = /\^([\s\S]+?)\^/g;
-    const regexSub = /~([\s\S]+?)~/g;
-    const regexRestoreRowspan = /\uE001/g;
-    const regexAutoLine = /([^\n])\n([^\n])/g;
-
-    function witcatPreprocessMarkdownText(source) {
-      try {
-        if (source === null || source === undefined) return "";
-        source = String(source);
-
-        const pipe = markdownExpose.pipeline || [];
-        for (let i = 0; i < pipe.length; i++) {
-          const step = pipe[i];
-          if (!step || step.enabled === false) continue;
-
-          switch (step.id) {
-            case 'normalizeNewlines':
-              source = source.replace(/(\r\n|\r)/g, "\n");
-              source = source.replace(/\\n/g, "\n");
-              break;
-
-            case 'protectHtmlBlock':
-              source = source.replace(regexProtectHtml, function(match) {
-                return match.replace(/\n/g, "\uE000");
-              });
-              break;
-
-            case 'protectRowspan':
-              source = source.replace(regexRowspan, "\uE001");
-              break;
-
-            case 'customRules':
-              if (markdownExpose.customRules && markdownExpose.customRules.length > 0) {
-                for (var r = 0; r < markdownExpose.customRules.length; r++) {
-                  var rule = markdownExpose.customRules[r];
-                  try {
-                    var regex = rule.regex || rule;
-                    var replaceStr = rule.replace;
-                    if (regex instanceof RegExp) {
-                      source = source.replace(regex, replaceStr);
-                    }
-                  } catch (err) {
-                    console.warn('Custom rule replace error:', err);
-                  }
-                }
-              }
-              break;
-
-            case 'builtinHighlight':
-              source = source.replace(regexHighlight, "<mark>$1</mark>");
-              break;
-
-            case 'builtinSup':
-              source = source.replace(regexSup, "<sup>$1</sup>");
-              break;
-
-            case 'builtinSub':
-              source = source.replace(regexSub, "<sub>$1</sub>");
-              break;
-
-            case 'restoreRowspan':
-              source = source.replace(regexRestoreRowspan, "^^");
-              break;
-
-            case 'autoLineBreak':
-              if (window.WitCatMarkDownAutoLineBreak !== false) {
-                source = source.replace(regexAutoLine, function (_, a, b) {
-                  return a + "  \n" + b;
-                });
-              }
-              break;
-          }
-        }
-
-        return source;
-      } catch (e) {
-        return String(source);
-      }
-    }
 
     markdownExpose.toHTML = function toHTML(source, dialect, options) {
       var input = markdownExpose.toHTMLTree(source, dialect, options);
@@ -198,7 +46,6 @@
     };
 
     markdownExpose.toHTMLTree = function toHTMLTree(input, dialect, options) {
-      if (typeof input === "string") input = witcatPreprocessMarkdownText(input);
       if (typeof input === "string") input = this.parse(input, dialect);
       var attrs = extract_attr(input),
         refs = {};
@@ -302,152 +149,6 @@
 
     Markdown.dialects.Gruber = {
       block: {
-        htmlBlock: function htmlBlock(block, next) {
-           var m = block.match(/^\[html\]([\s\S]*?)\[\/html\]/i);
-           if (!m) return undefined;
-           var content = m[1].replace(/\uE000/g, "\n");
-           var node = [["raw_html", content]];
-           if (m[0].length < block.length) {
-             next.unshift(mk_block(block.substr(m[0].length), block.trailing, block.lineNumber + count_lines(m[0])));
-           }
-           return node;
-        },
-
-        table: function table(block, next) {
-          var lines = block.split('\n');
-          if (lines.length < 2) return undefined;
-
-          function splitTableRow(line) {
-            if (!line.includes('|')) return null;
-            var parts = line.split('|');
-            if (parts.length > 0 && parts[0].trim() === '') parts.shift();
-            if (parts.length > 0 && parts[parts.length - 1].trim() === '') parts.pop();
-            return parts.map(function(s) { return s.trim(); });
-          }
-
-          var headers = splitTableRow(lines[0]);
-          if (!headers) return undefined;
-          
-          var separatorLine = lines[1];
-          if (!separatorLine.includes('|')) return undefined;
-          var separators = splitTableRow(separatorLine);
-          if (!separators) return undefined;
-
-          var rawRows = [];
-          for (var i = 2; i < lines.length; i++) {
-            var rowCells = splitTableRow(lines[i]);
-            if (rowCells) {
-              rawRows.push(rowCells);
-            } else {
-              break; 
-            }
-          }
-
-          var consumedLines = 2 + rawRows.length;
-          var tableNode = ['table', { class: 'WitCatMarkDownTable' }];
-          var thead = ['thead'];
-          var headerRow = ['tr'];
-          
-          for (var h = 0; h < headers.length; h++) {
-             var th = ['th'];
-             th.push.apply(th, this.processInline(headers[h]));
-             headerRow.push(th);
-          }
-          thead.push(headerRow);
-          tableNode.push(thead);
-
-          var tbody = ['tbody'];
-          var activeRowspans = new Array(headers.length).fill(0);
-
-          for (var r = 0; r < rawRows.length; r++) {
-            var tr = ['tr'];
-            var rowData = rawRows[r];
-            var colCount = headers.length;
-            var currentCellIdx = 0; 
-
-            for (var c = 0; c < colCount; c++) {
-              if (activeRowspans[c] > 0) {
-                activeRowspans[c]--; 
-                
-                if (currentCellIdx < rowData.length) {
-                   var cellContent = rowData[currentCellIdx];
-                   if (cellContent === '^') {
-                      currentCellIdx++;
-                   } else {
-                      currentCellIdx++; 
-                   }
-                }
-                continue; 
-              }
-
-              var text = (currentCellIdx < rowData.length) ? rowData[currentCellIdx] : "";
-              currentCellIdx++;
-
-              var colspanMatch = text.match(/^>>(\d+)?$/);
-              if (colspanMatch) {
-                if (tr.length > 1) { 
-                   var lastTd = tr[tr.length - 1];
-                   if (lastTd) {
-                      if (!lastTd[1]) lastTd[1] = {};
-                      var currentSpan = parseInt(lastTd[1].colspan || 1);
-                      var addSpan = colspanMatch[1] ? parseInt(colspanMatch[1]) : 1;
-                      lastTd[1].colspan = currentSpan + addSpan;
-                   }
-                }
-                continue;
-              }
-
-              var rowspanMatch = text.match(/^(.*)\^\^(\d+)?$/);
-              if (rowspanMatch) {
-                var content = rowspanMatch[1];
-                var span = rowspanMatch[2] ? parseInt(rowspanMatch[2]) : 2; 
-                
-                var td = ['td'];
-                if (content) td.push.apply(td, this.processInline(content));
-                
-                if (!td[1]) td[1] = {};
-                td[1].rowspan = span;
-                tr.push(td);
-
-                activeRowspans[c] = span - 1;
-                continue;
-              }
-
-              var td = ['td'];
-              td.push.apply(td, this.processInline(text));
-              tr.push(td);
-            }
-            tbody.push(tr);
-          }
-          tableNode.push(tbody);
-
-          var remaining = lines.slice(consumedLines).join('\n');
-          if (remaining) {
-            next.unshift(mk_block(remaining, block.trailing, block.lineNumber + consumedLines));
-          }
-
-          return [['div', { class: 'WitCatMarkDownTableContainer' }, tableNode]];
-        },
-
-        fencedCode: function fencedCode(block, next) {
-          var m = block.match(/^```([^\n`]*)\n([\s\S]*?)\n```[ \t]*(?:\n|$)/);
-          if (!m) return undefined;
-          var info = (m[1] || "").trim();
-          var codeText = m[2] || "";
-          var attrs = {};
-          if (info) {
-            var lang = String(info).split(/\s+/)[0];
-            if (lang) {
-              attrs.lang = lang;
-            }
-          }
-          var node = ["fenced_code_block", attrs, codeText];
-          if (m[0].length < block.length) {
-            next.unshift(mk_block(block.substr(m[0].length), block.trailing, block.lineNumber + count_lines(m[0])));
-          }
-          return [node];
-        },
-
         atxHeader: function atxHeader(block, next) {
           var m = block.match(/^(#{1,6})\s*(.*?)\s*#*\s*(?:\n|$)/);
           if (!m) return undefined;
@@ -459,7 +160,7 @@
         },
 
         setextHeader: function setextHeader(block, next) {
-          var m = block.match(/^(.*)\n([-=])\2\2\2+(?:\n|$)/);
+          var m = block.match(/^(.*)\n([-=])\2\2+(?:\n|$)/);
           if (!m) return undefined;
           var level = m[2] === "=" ? 1 : 2;
           var header = ["header", { level: level }, m[1]];
@@ -468,6 +169,23 @@
           return [header];
         },
 
+        // ====== 新增：围栏代码块 ======
+        fencedCode: function fencedCode(block, next) {
+          var m = block.match(/^(`{3,}|~{3,})[ \t]*(\S+)?[ \t]*\n([\s\S]*?)\n[ \t]*\1[ \t]*(?:\n|$)/);
+          if (!m) return undefined;
+          var fence = m[1];
+          var lang = m[2] || "";
+          var code = m[3];
+          var attrs = {};
+          if (lang) attrs.language = lang;
+          var consumedLines = count_lines(m[0]);
+          if (m[0].length < block.length) {
+            next.unshift(mk_block(block.substr(m[0].length), block.trailing, block.lineNumber + consumedLines));
+          }
+          return [["fenced_code", attrs, code]];
+        },
+
+        // ====== 原有：缩进代码块 ======
         code: function code(block, next) {
           var ret = [],
             re = /^(?: {0,3}\t| {4})(.*)\n?/;
@@ -677,6 +395,17 @@
           };
         })(),
 
+        // ====== 新增：块级 HTML 原始标签 ======
+        htmlBlock: function htmlBlock(block, next) {
+          var blockTags = /^(address|article|aside|blockquote|details|dialog|dd|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|header|hgroup|hr|li|main|nav|ol|p|pre|section|table|ul|canvas|video|audio|iframe|script|style|noscript)[\s\/>]/i;
+          if (!/^\s*</.test(block.valueOf())) return undefined;
+          var stripped = block.valueOf().replace(/^\s+/, "");
+          var m = stripped.match(/^<([a-zA-Z][a-zA-Z0-9]*)/);
+          if (!m) return undefined;
+          if (!blockTags.test(stripped)) return undefined;
+          return [["html_block", block.valueOf()]];
+        },
+
         blockquote: function blockquote(block, next) {
           if (!block.match(/^>/m)) return undefined;
           var jsonml = [];
@@ -732,13 +461,159 @@
           return [];
         },
 
+        // ====== 新增：表格（支持合并） ======
+        table: function table(block, next) {
+          var bv = block.valueOf();
+          var lines = bv.split(/\n/);
+          if (lines.length < 2) return undefined;
+          if (!/^\s*\|/.test(lines[0])) return undefined;
+          if (!/^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)+\|?\s*$/.test(lines[1])) return undefined;
+
+          var parseRow = function (line) {
+            var s = line.trim();
+            if (s.charAt(0) === "|") s = s.substr(1);
+            if (s.charAt(s.length - 1) === "|") s = s.substr(0, s.length - 1);
+            var cells = s.split("|");
+            for (var k = 0; k < cells.length; k++) cells[k] = cells[k].trim();
+            return cells;
+          };
+
+          var parseAlign = function (line) {
+            var cells = parseRow(line);
+            return cells.map(function (c) {
+              c = c.trim().toLowerCase();
+              var l = c.charAt(0) === ":";
+              var r = c.charAt(c.length - 1) === ":";
+              if (l && r) return "center";
+              if (r) return "right";
+              if (l) return "left";
+              return "";
+            });
+          };
+
+          var header = parseRow(lines[0]);
+          var aligns = parseAlign(lines[1]);
+          var bodyRows = [];
+          var consumedLen = lines[0].length + 1 + lines[1].length;
+          for (var i = 2; i < lines.length; i++) {
+            if (!/^\s*\|/.test(lines[i])) break;
+            bodyRows.push(parseRow(lines[i]));
+            consumedLen += lines[i].length + 1;
+          }
+
+          // 构建网格
+          var grid = [];
+          grid.push(header.map(function (c) { return { text: c, colspan: 1, rowspan: 1, skip: false, header: true }; }));
+          for (i = 0; i < bodyRows.length; i++) {
+            grid.push(bodyRows[i].map(function (c) {
+              return {
+                text: c,
+                colspan: 1,
+                rowspan: 1,
+                skip: false,
+                header: false,
+                mergeRight: c === ">",
+                mergeUp: c === "^"
+              };
+            }));
+          }
+
+          // 处理合并
+          for (i = 1; i < grid.length; i++) {
+            for (var j = 0; j < grid[i].length; j++) {
+              var cell = grid[i][j];
+              if (cell.mergeRight) {
+                var k = j - 1;
+                while (k >= 0 && grid[i][k].skip) k--;
+                if (k >= 0) {
+                  grid[i][k].colspan++;
+                  cell.skip = true;
+                }
+              }
+              if (cell.mergeUp) {
+                var k = i - 1;
+                while (k >= 1 && grid[k][j] && grid[k][j].skip) k--;
+                if (k >= 1 && grid[k][j]) {
+                  grid[k][j].rowspan++;
+                  cell.skip = true;
+                } else if (k === 0 && grid[0][j]) {
+                  grid[0][j].rowspan++;
+                  cell.skip = true;
+                }
+              }
+            }
+          }
+
+          // 构建 JsonML
+          var tbl = ["table", { class: "WitCatMarkDownTable" }];
+          var thead = ["thead", ["tr"]];
+          for (j = 0; j < grid[0].length; j++) {
+            var hcell = grid[0][j];
+            if (hcell.skip) continue;
+            var hattrs = {};
+            if (aligns[j]) hattrs.align = aligns[j];
+            if (hcell.colspan > 1) hattrs.colspan = String(hcell.colspan);
+            if (hcell.rowspan > 1) hattrs.rowspan = String(hcell.rowspan);
+            thead[1].push(["th", hattrs].concat(this.processInline(hcell.text)));
+          }
+          tbl.push(thead);
+
+          if (grid.length > 1) {
+            var tbody = ["tbody"];
+            for (i = 1; i < grid.length; i++) {
+              var tr = ["tr"];
+              for (j = 0; j < grid[i].length; j++) {
+                var bcell = grid[i][j];
+                if (bcell.skip) continue;
+                var battrs = {};
+                if (aligns[j]) battrs.align = aligns[j];
+                if (bcell.colspan > 1) battrs.colspan = String(bcell.colspan);
+                if (bcell.rowspan > 1) battrs.rowspan = String(bcell.rowspan);
+                tr.push(["td", battrs].concat(this.processInline(bcell.text)));
+              }
+              tbody.push(tr);
+            }
+            tbl.push(tbody);
+          }
+
+          if (consumedLen < block.length) {
+            next.unshift(mk_block(block.substr(consumedLen), block.trailing));
+          }
+          return [tbl];
+        },
+
+        // ====== 新增：定义列表 ======
+        definitionList: function definitionList(block, next) {
+          var lines = block.valueOf().split(/\n/);
+          if (lines.length < 2) return undefined;
+          if (/^\s*$/.test(lines[0]) || /^\s*[:]/.test(lines[0]) || /^\s{4,}/.test(lines[0])) return undefined;
+          if (!/^:\s+/.test(lines[1])) return undefined;
+
+          var dl = ["dl"];
+          var i = 0;
+          while (i < lines.length) {
+            if (lines[i] && !/^\s*$/.test(lines[i]) && !/^\s*:\s+/.test(lines[i])) {
+              dl.push(["dt"].concat(this.processInline(lines[i].trim())));
+              i++;
+              while (i < lines.length && /^:\s+/.test(lines[i])) {
+                var defText = lines[i].replace(/^:\s+/, "");
+                dl.push(["dd"].concat(this.processInline(defText)));
+                i++;
+              }
+            } else {
+              break;
+            }
+            while (i < lines.length && /^\s*$/.test(lines[i])) i++;
+          }
+
+          return [dl];
+        },
+
         para: function para(block, next) {
           return [["para"].concat(this.processInline(block))];
-        },
-      },
+        }
+      }
     };
-
-    Markdown.dialects.Gruber.block.table = Markdown.dialects.Gruber.block.table;
 
     Markdown.dialects.Gruber.inline = {
       __oneElement__: function oneElement(text, patterns_or_re, previous_nodes) {
@@ -779,23 +654,12 @@
       "]": function () {},
       "}": function () {},
 
-      __escape__: /^\\[\\`\*_{}\[\]()#\+.!\-]/,
+      // 扩展的转义字符
+      __escape__: /^\\[\\`\*_{}\[\]()#\+.!\-~|>:^]/,
 
       "\\": function escaped(text) {
         if (this.dialect.inline.__escape__.exec(text)) return [2, text.charAt(1)];
         else return [1, "\\"];
-      },
-
-      "{": function trigger(text) {
-          var m = text.match(/^\{trigger=(\d+(?:\.\d+)?)\}\[(.*?)\]\((.*?)\)/);
-          if (m) {
-              return [m[0].length, ["button", {
-                  class: "wc-trigger-btn",
-                  "data-trigger-id": m[3],
-                  "data-trigger-interval": m[1]
-              }, this.processInline(m[2])]];
-          }
-          return [1, "{"];
       },
 
       "![": function image(text) {
@@ -811,38 +675,15 @@
         if (m) {
           return [m[0].length, ["img_ref", { alt: m[1], ref: m[2].toLowerCase(), original: m[0] }]];
         }
+        // 引用式图片简写 ![alt][]
+        m = text.match(/^!\[(.*?)\]\[\]/);
+        if (m) {
+          return [m[0].length, ["img_ref", { alt: m[1], ref: m[1].toLowerCase(), original: m[0] }]];
+        }
         return [2, "!["];
       },
 
-      "[": function linkAndTags(text) {
-        
-        var m = text.match(/^\[color=([#\w]+)\]([\s\S]*?)\[\/color\]/i);
-        if (m) {
-          return [m[0].length, ["span", { style: "color:" + m[1] }, this.processInline(m[2])]];
-        }
-
-        m = text.match(/^\[bg=([#\w]+)\]([\s\S]*?)\[\/bg\]/i);
-        if (m) {
-          return [m[0].length, ["span", { style: "background-color:" + m[1] }, this.processInline(m[2])]];
-        }
-
-        m = text.match(/^\[size=([\w%.]+)\]([\s\S]*?)\[\/size\]/i);
-        if (m) {
-          return [m[0].length, ["span", { style: "font-size:" + m[1] }, this.processInline(m[2])]];
-        }
-        
-        m = text.match(/^\[center\]([\s\S]*?)\[\/center\]/i);
-        if (m) {
-          return [m[0].length, ["div", { style: "text-align:center;display:block;" }, this.processInline(m[1])]];
-        }
-
-        m = text.match(/^\[([a-zA-Z][\w-]*)\]([\s\S]*?)\[\/\1\]/i);
-        if (m) {
-          var tagName = m[1];
-          var content = m[2];
-          return [m[0].length, ["span", { class: "WitCatTag-" + tagName }, this.processInline(content)]];
-        }
-
+      "[": function link(text) {
         var orig = String(text);
         var res = Markdown.DialectHelpers.inline_until_char.call(this, text.substr(1), "]");
         if (!res) return [1, "["];
@@ -851,7 +692,7 @@
           link,
           attrs;
         text = text.substr(consumed);
-        m = text.match(/^\s*\([ \t]*([^"']*)(?:[ \t]+(["'])(.*?)\2)?[ \t]*\)/);
+        var m = text.match(/^\s*\([ \t]*([^"']*)(?:[ \t]+(["'])(.*?)\2)?[ \t]*\)/);
         if (m) {
           var url = m[1];
           consumed += m[0].length;
@@ -885,6 +726,15 @@
           link = ["link_ref", attrs].concat(children);
           return [consumed, link];
         }
+        // 引用式链接简写 [text][]
+        m = text.match(/^\s*\[\]/);
+        if (m && children.length) {
+          consumed += m[0].length;
+          var refLabel = typeof children[0] === "string" ? children[0] : String(children);
+          attrs = { ref: refLabel.toLowerCase(), original: orig.substr(0, consumed) };
+          link = ["link_ref", attrs].concat(children);
+          return [consumed, link];
+        }
         if (children.length == 1 && typeof children[0] == "string") {
           attrs = { ref: children[0].toLowerCase(), original: orig.substr(0, consumed) };
           link = ["link_ref", attrs, children[0]];
@@ -893,7 +743,8 @@
         return [1, "["];
       },
 
-      "<": function autoLink(text) {
+      // < 同时处理 autoLink、内联 HTML 标签
+      "<": function autoLinkOrHtml(text) {
         var m;
         if ((m = text.match(/^<(?:((https?|ftp|mailto):[^>]+)|(.*?@.*?\.[a-zA-Z]+))>/)) != null) {
           if (m[3]) {
@@ -901,6 +752,11 @@
           } else if (m[2] == "mailto") {
             return [m[0].length, ["link", { href: m[1] }, m[1].substr("mailto:".length)]];
           } else return [m[0].length, ["link", { href: m[1] }, m[1]]];
+        }
+        // 内联 HTML 标签（含自闭合）
+        m = text.match(/^<\/?([a-zA-Z][a-zA-Z0-9]*)(\s[^<>]*)?\/?>/);
+        if (m) {
+          return [m[0].length, ["html_inline", m[0]]];
         }
         return [1, "<"];
       },
@@ -913,45 +769,27 @@
         }
       },
 
+      // ====== 新增：删除线 ~~text~~ ======
+      "~~": function strikethrough(text) {
+        var m = text.match(/^~~([\s\S]+?)~~/);
+        if (!m) return [1, "~"];
+        var inner = this.processInline(m[1]);
+        return [m[0].length, ["strikethrough"].concat(inner)];
+      },
+
       "  \n": function lineBreak(text) {
         return [3, ["linebreak"]];
-      },
-
-      "_": function underline(text, orig_match) {
-        if (this.underline_state[0] == "_") {
-          this.underline_state.shift();
-          return [text.length, new CloseTag(text.length - "_".length)];
-        } else {
-          var other = this.em_state.slice(),
-            state = this.strong_state.slice();
-          this.underline_state.unshift("_");
-          var res = this.processInline(text.substr("_".length));
-          var last = res[res.length - 1];
-          var check = this.underline_state.shift();
-          if (last instanceof CloseTag) {
-            res.pop();
-            var consumed = text.length - last.len_after;
-            return [consumed, ["u"].concat(res)]; 
-          } else {
-            this.em_state = other;
-            this.strong_state = state;
-            return ["_".length, "_"];
-          }
-        }
-      },
-
-      "-": function strikethrough(text) {
-        var m = text.match(/^(-{1})([\s\S]+?)\1/);
-        if (m) {
-          return [m[0].length, ["s"].concat(this.processInline(m[2]))];
-        }
-        return [1, "-"];
-      },
+      }
     };
 
     function strong_em(tag, md) {
       var state_slot = tag + "_state",
         other_slot = tag == "strong" ? "em_state" : "strong_state";
+
+      function CloseTag(len) {
+        this.len_after = len;
+        this.name = "close_" + md;
+      }
 
       return function (text, orig_match) {
         if (this[state_slot][0] == md) {
@@ -980,42 +818,28 @@
     Markdown.dialects.Gruber.inline["**"] = strong_em("strong", "**");
     Markdown.dialects.Gruber.inline["__"] = strong_em("strong", "__");
     Markdown.dialects.Gruber.inline["*"] = strong_em("em", "*");
-    
+    Markdown.dialects.Gruber.inline["_"] = strong_em("em", "_");
+
     Markdown.buildBlockOrder = function (d) {
       var ord = [];
       for (var i in d) {
         if (i == "__order__" || i == "__call__") continue;
         ord.push(i);
       }
-      
-      var priority = [
-          'htmlBlock',
-          'table',
-          'fencedCode',
-          'code',
-          'lists',
-          'blockquote',
-          'horizRule',
-          'atxHeader',
-          'setextHeader',
-          'referenceDefn',
-          'para'
-      ];
-
-      ord.sort(function(a, b) {
-        var ia = priority.indexOf(a);
-        var ib = priority.indexOf(b);
-        if (ia === -1) ia = 999;
-        if (ib === -1) ib = 999;
-        return ia - ib;
-      });
       d.__order__ = ord;
     };
 
     Markdown.buildInlinePatterns = function (d) {
       var patterns = [];
+      // 优先匹配较长的模式：按长度降序稳定排序
+      var keys = [];
       for (var i in d) {
         if (i.match(/^__.*__$/)) continue;
+        keys.push(i);
+      }
+      keys.sort(function (a, b) { return b.length - a.length; });
+      for (var k = 0; k < keys.length; k++) {
+        var i = keys[k];
         var l = i.replace(/([\\.*+?|()\[\]{}])/g, "\\$1").replace(/\n/, "\\n");
         patterns.push(i.length == 1 ? l : "(?:" + l + ")");
       }
@@ -1098,14 +922,14 @@
       options.root = options.root || false;
       var content = [];
       if (options.root) {
-        content.push(render_tree(jsonml, false));
+        content.push(render_tree(jsonml));
       } else {
         jsonml.shift();
         if (jsonml.length && typeof jsonml[0] === "object" && !(jsonml[0] instanceof Array)) {
           jsonml.shift();
         }
         while (jsonml.length) {
-          content.push(render_tree(jsonml.shift(), false));
+          content.push(render_tree(jsonml.shift()));
         }
       }
       return content.join("\n\n");
@@ -1120,31 +944,28 @@
         .replace(/'/g, "&#39;");
     }
 
-    function render_tree(jsonml, inCode) {
+    function render_tree(jsonml) {
       if (typeof jsonml === "string") {
-        // 开启不安全 HTML 渲染，但如果处于代码块内部，依然要强制转义，防止代码变成真实 DOM
-        return inCode ? escapeHTML(jsonml) : jsonml;
+        return escapeHTML(jsonml);
       }
-      var tag = jsonml.shift();
-
-      if (tag === "raw_html") {
-         return jsonml[0]; 
+      // 原始 HTML 透传
+      if (jsonml[0] === "__html__") {
+        return String(jsonml[1] || "");
       }
-
-      var isCode = (tag === "code" || tag === "pre");
-      var passInCode = inCode || isCode;
-
-      var attributes = {},
+      var tag = jsonml.shift(),
+        attributes = {},
         content = [];
       if (jsonml.length && typeof jsonml[0] === "object" && !(jsonml[0] instanceof Array)) {
         attributes = jsonml.shift();
       }
       while (jsonml.length) {
-        content.push(render_tree(jsonml.shift(), passInCode));
+        content.push(render_tree(jsonml.shift()));
       }
       var tag_attrs = "";
       for (var a in attributes) {
-        tag_attrs += " " + a + '="' + escapeHTML(attributes[a]) + '"';
+        if (a === "class" || a === "id" || a === "style" || a === "align" || a === "colspan" || a === "rowspan" || a === "href" || a === "src" || a === "alt" || a === "title") {
+          tag_attrs += " " + a + '="' + escapeHTML(String(attributes[a])) + '"';
+        }
       }
       if (tag == "img" || tag == "br" || tag == "hr") {
         return "<" + tag + tag_attrs + "/>";
@@ -1171,10 +992,8 @@
       if (typeof jsonml === "string") {
         return jsonml;
       }
-      switch (jsonml[0]) {
-        case "raw_html":
-          return ["raw_html", jsonml[1]];
 
+      switch (jsonml[0]) {
         case "header":
           jsonml[0] = "h" + jsonml[1].level;
           delete jsonml[1].level;
@@ -1195,9 +1014,6 @@
           jsonml[0] = "html";
           if (attrs) delete attrs.references;
           break;
-        case "button":
-          jsonml[0] = "button";
-          break;
         case "code_block":
           jsonml[0] = "pre";
           i = attrs ? 2 : 1;
@@ -1205,21 +1021,23 @@
           code.push.apply(code, jsonml.splice(i, jsonml.length - i));
           jsonml[i] = code;
           break;
-
-        case "fenced_code_block":
-          jsonml[0] = "pre";
-          i = attrs ? 2 : 1;
-          var fencedCode = ["code"];
-          if (attrs && attrs.lang) {
-            fencedCode[1] = { class: "language-" + attrs.lang };
-            delete attrs.lang;
-          }
-          fencedCode.push.apply(fencedCode, jsonml.splice(i, jsonml.length - i));
-          jsonml[i] = fencedCode;
-          break;
-
+        case "fenced_code":
+          var lang = attrs && attrs.language ? attrs.language : "";
+          var fcStart = attrs ? 2 : 1;
+          var fcContent = jsonml.slice(fcStart).join("");
+          var codeAttrs = lang ? { class: "language-" + lang } : {};
+          return ["pre", {}, ["code", codeAttrs, escapeHTML(fcContent)]];
         case "inlinecode":
           jsonml[0] = "code";
+          break;
+        case "html_block":
+          var hbStart = attrs ? 2 : 1;
+          return ["__html__", jsonml.slice(hbStart).join("")];
+        case "html_inline":
+          var hiStart = attrs ? 2 : 1;
+          return ["__html__", jsonml.slice(hiStart).join("")];
+        case "strikethrough":
+          jsonml[0] = "del";
           break;
         case "img":
           jsonml[1].src = jsonml[1].href;
@@ -1259,13 +1077,6 @@
             return attrs.original;
           }
           break;
-        case "table":
-          if (jsonml[0] === "table") {
-            var tableContainer = ["div", { class: "WitCatMarkDownTableContainer" }];
-            tableContainer.push(jsonml);
-            return tableContainer;
-          }
-          break;
       }
       i = 1;
       if (attrs) {
@@ -1300,7 +1111,7 @@
     }
   })();
 
-  // ==================== Prism代码高亮库部分 ====================
+  // ==================== Prism 代码高亮库部分 ====================
   var Prism = (function () {
     var _self = (typeof window !== 'undefined') ? window : {};
     
@@ -1856,9 +1667,6 @@
   let markdownmousedown = {};
   let touchEvent = {};
 
-  window.WitCatMarkDownAutoLineBreak = true;
-  window.WitCatMarkDownMathBeautify = true;
-
   class WitCatMarkDownExtension {
     constructor() {
       this.markdownExpose = markdownExpose;
@@ -1866,93 +1674,26 @@
       this.markdownmousedown = markdownmousedown;
       this.touchEvent = touchEvent;
       this.resize = null;
-      this.autoScaleObserver = null;
-      this.autoScaleTimer = null;
       
-      this._triggerTimestamps = {};
-      this._activeTriggerId = null;
-      this._activeTriggers = new Set(); 
-
-      this.fileSystem = [
-        { name: 'example.md', content: '# Welcome to WitCatMarkDown\nType your markdown here...' }
-      ];
-      this.currentFileIndex = 0;
-
+      // 新增：存储动态解析规则
+      this.dynamicRules = [];
+      
       this._initEventListeners();
       this._addStyles();
       this._addScript();
-      this._initEditor();
-      this._initRulePanel();
     }
 
     getInfo() {
       return {
         id: extensionId,
-        name: '白猫的markdown',
+        name: '白猫的 markdown',
         color1: '#1c7321',
         color2: '#114514',
         blocks: [
           {
-            opcode: 'whenTrigger',
-            blockType: Scratch.BlockType.HAT,
-            text: '当触发器 ID [ID] 被点击',
-            isEdgeActivated: true, 
-            arguments: {
-              ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'event1' }
-            }
-          },
-          {
-            opcode: 'setTriggerHTML',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '自定义ID 为 [ID] 的互交按钮外观html为 [HTML]',
-            arguments: {
-              ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'myEvent' },
-              HTML: { type: Scratch.ArgumentType.STRING, defaultValue: '<b>Click Me</b>' }
-            }
-          },
-          {
-            opcode: 'openEditor',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '打开 markdown 编辑器面板',
-          },
-          {
-            opcode: 'openRuleManager',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '打开自定义规则管理面板',
-          },
-          {
-            opcode: 'importAllFiles',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '导入所有文件 [json]',
-            arguments: {
-              json: { type: Scratch.ArgumentType.STRING, defaultValue: '[]' }
-            }
-          },
-          {
-            opcode: 'exportAllFiles',
-            blockType: Scratch.BlockType.REPORTER,
-            text: '导出所有文件(JSON)',
-          },
-          {
-            opcode: 'createFromFile',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '创建 markdown ID[id] X[x] Y[y] 宽[width] 高[height] 从文件[filename]',
-            arguments: {
-              id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
-              x: { type: Scratch.ArgumentType.NUMBER, defaultValue: '0' },
-              y: { type: Scratch.ArgumentType.NUMBER, defaultValue: '0' },
-              width: { type: Scratch.ArgumentType.NUMBER, defaultValue: '100' },
-              height: { type: Scratch.ArgumentType.NUMBER, defaultValue: '100' },
-              filename: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'fileList'
-              }
-            }
-          },
-          {
             opcode: 'create',
             blockType: Scratch.BlockType.COMMAND,
-            text: '创建 markdown ID[id]X[x]Y[y]宽[width]高[height]内容[text]',
+            text: '创建 markdown ID[id]X[x]Y[y]宽[width]高[height]内容 [text]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               x: { type: Scratch.ArgumentType.NUMBER, defaultValue: '0' },
@@ -1965,64 +1706,28 @@
           {
             opcode: 'set',
             blockType: Scratch.BlockType.COMMAND,
-            text: '设置 markdown ID[id]的[type]为[text]',
+            text: '设置 markdown ID[id] 的 [type] 为 [text]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
-              type: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'types'
-              },
+              type: { type: Scratch.ArgumentType.STRING, menu: 'types' },
               text: { type: Scratch.ArgumentType.STRING, defaultValue: '0' }
-            }
-          },
-          {
-            opcode: 'addCustomRule',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '添加自定义规则 匹配[match] 替换为[replace]',
-            arguments: {
-              match: { type: Scratch.ArgumentType.STRING, defaultValue: '\\[myTag\\](.*?)\\[\\/myTag\\]' },
-              replace: { type: Scratch.ArgumentType.STRING, defaultValue: '<span style="color:red">$1</span>' }
-            }
-          },
-          {
-            opcode: 'clearCustomRules',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '清空自定义规则',
-          },
-          {
-            opcode: 'importCustomRulesJSON',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '导入自定义解析式集json为 [JSON]',
-            arguments: {
-              JSON: { type: Scratch.ArgumentType.STRING, defaultValue: '[{"match":"foo","replace":"bar"}]' }
-            }
-          },
-          {
-            opcode: 'importCustomRulesURL',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '导入自定义解析式集网址为 [URL]',
-            arguments: {
-              URL: { type: Scratch.ArgumentType.STRING, defaultValue: 'https://example.com/rules.json' }
             }
           },
           {
             opcode: 'sets',
             blockType: Scratch.BlockType.COMMAND,
-            text: '设置 markdown ID[id]第[num]个[type]的样式为[text]',
+            text: '设置 markdown ID[id] 第 [num] 个 [type] 的样式为 [text]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               num: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
-              type: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'settype'
-              },
+              type: { type: Scratch.ArgumentType.STRING, menu: 'settype' },
               text: { type: Scratch.ArgumentType.STRING, defaultValue: '{"color":"red"}' }
             }
           },
           {
             opcode: 'imgstyle',
             blockType: Scratch.BlockType.COMMAND,
-            text: 'markdown ID[id]的第[num]张图片的宽[width]高[height]',
+            text: 'markdown ID[id] 的第 [num] 张图片的宽 [width] 高 [height]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               num: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
@@ -2033,65 +1738,34 @@
           {
             opcode: 'code',
             blockType: Scratch.BlockType.COMMAND,
-            text: '设置 markdown ID[id]第[num]个代码框的高亮为[name]',
+            text: '设置 markdown ID[id] 第 [num] 个代码框的高亮为 [name]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               num: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
-              name: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'code'
-              }
+              name: { type: Scratch.ArgumentType.STRING, menu: 'code' }
             }
           },
           {
             opcode: 'ide',
             blockType: Scratch.BlockType.COMMAND,
-            text: '设置 markdown ID[id]为[name]',
+            text: '设置 markdown ID[id] 为 [name]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
-              name: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'ide'
-              }
+              name: { type: Scratch.ArgumentType.STRING, menu: 'ide' }
             }
           },
           {
             opcode: 'size',
             blockType: Scratch.BlockType.COMMAND,
-            text: 'markdown大小自适应[type]',
+            text: 'markdown 大小自适应 [type]',
             arguments: {
-              type: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'typess'
-              }
-            }
-          },
-          {
-            opcode: 'autoline',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '设置自动换行为[enable]',
-            arguments: {
-              enable: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'autoline'
-              }
-            }
-          },
-          {
-            opcode: 'automath',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '设置数学符号优化为[enable]',
-            arguments: {
-              enable: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'autoline'
-              }
+              type: { type: Scratch.ArgumentType.STRING, menu: 'typess' }
             }
           },
           {
             opcode: 'setfont',
             blockType: Scratch.BlockType.COMMAND,
-            text: '设置 markdown ID[id]的字体为[name]',
+            text: '设置 markdown ID[id] 的字体为 [name]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               name: { type: Scratch.ArgumentType.STRING, defaultValue: 'arial' }
@@ -2100,10 +1774,19 @@
           {
             opcode: 'loadfont',
             blockType: Scratch.BlockType.COMMAND,
-            text: '从[text]加载字体名[name]',
+            text: '从 [text] 加载字体名 [name]',
             arguments: {
               text: { type: Scratch.ArgumentType.STRING, defaultValue: 'url' },
               name: { type: Scratch.ArgumentType.STRING, defaultValue: 'arial' }
+            }
+          },
+          // 新增积木
+          {
+            opcode: 'loadRules',
+            blockType: Scratch.BlockType.COMMAND,
+            text: '动态加载解析规则 [url]',
+            arguments: {
+              url: { type: Scratch.ArgumentType.STRING, defaultValue: 'https://example.com/rules.json' }
             }
           },
           {
@@ -2123,53 +1806,41 @@
           {
             opcode: 'get',
             blockType: Scratch.BlockType.REPORTER,
-            text: 'markdown ID[id]的[type]',
+            text: 'markdown ID[id] 的 [type]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
-              type: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'type'
-              }
+              type: { type: Scratch.ArgumentType.STRING, menu: 'type' }
             }
           },
           {
             opcode: 'getwidth',
             blockType: Scratch.BlockType.REPORTER,
-            text: '获取内容[content]的渲染[type]',
+            text: '获取内容 [content] 的渲染 [type]',
             arguments: {
               content: { type: Scratch.ArgumentType.STRING, defaultValue: 'witcat' },
-              type: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'width'
-              }
+              type: { type: Scratch.ArgumentType.STRING, menu: 'width' }
             }
           },
           {
             opcode: 'click',
             blockType: Scratch.BlockType.REPORTER,
-            text: '上次点击的元素的[clickmenu]',
+            text: '上次点击的元素的 [clickmenu]',
             arguments: {
-              clickmenu: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'clickmenu'
-              }
+              clickmenu: { type: Scratch.ArgumentType.STRING, menu: 'clickmenu' }
             }
           },
           {
             opcode: 'touchs',
             blockType: Scratch.BlockType.REPORTER,
-            text: '碰到的元素的[clickmenu]',
+            text: '碰到的元素的 [clickmenu]',
             arguments: {
-              clickmenu: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'clickmenu'
-              }
+              clickmenu: { type: Scratch.ArgumentType.STRING, menu: 'clickmenu' }
             }
           },
           {
             opcode: 'touch',
             blockType: Scratch.BlockType.BOOLEAN,
-            text: '碰到markdown[id]第[number]个[type]元素?',
+            text: '碰到 markdown[id] 第 [number] 个 [type] 元素？',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               number: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
@@ -2179,21 +1850,18 @@
           {
             opcode: 'settextalign',
             blockType: Scratch.BlockType.COMMAND,
-            text: '设置 markdown ID[id]第[num]个[type]为[text]',
+            text: '设置 markdown ID[id] 第 [num] 个 [type] 为 [text]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               num: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
               type: { type: Scratch.ArgumentType.STRING, defaultValue: 'all' },
-              text: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'textalign'
-              }
+              text: { type: Scratch.ArgumentType.STRING, menu: 'textalign' }
             }
           },
           {
             opcode: 'move',
             blockType: Scratch.BlockType.COMMAND,
-            text: 'markdown[id]第[number]个[type]元素偏移X[x]Y[y]',
+            text: 'markdown[id] 第 [number] 个 [type] 元素偏移 X[x]Y[y]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               number: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
@@ -2205,7 +1873,7 @@
           {
             opcode: 'scale',
             blockType: Scratch.BlockType.COMMAND,
-            text: 'markdown[id]第[number]个[type]元素缩放X[x]Y[y]',
+            text: 'markdown[id] 第 [number] 个 [type] 元素缩放 X[x]Y[y]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               number: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
@@ -2217,7 +1885,7 @@
           {
             opcode: 'rot',
             blockType: Scratch.BlockType.COMMAND,
-            text: 'markdown[id]第[number]个[type]元素旋转[y]',
+            text: 'markdown[id] 第 [number] 个 [type] 元素旋转 [y]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               number: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
@@ -2228,7 +1896,7 @@
           {
             opcode: 'dmove',
             blockType: Scratch.BlockType.COMMAND,
-            text: 'markdown[id]第[number]个[type]元素3D偏移X[x]Y[y]Z[z]',
+            text: 'markdown[id] 第 [number] 个 [type] 元素 3D 偏移 X[x]Y[y]Z[z]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               number: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
@@ -2241,7 +1909,7 @@
           {
             opcode: 'drot',
             blockType: Scratch.BlockType.COMMAND,
-            text: 'markdown[id]第[number]个[type]元素3D旋转X[x]Y[y]Z[z]',
+            text: 'markdown[id] 第 [number] 个 [type] 元素 3D 旋转 X[x]Y[y]Z[z]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               number: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
@@ -2254,40 +1922,23 @@
           {
             opcode: 'setinsite',
             blockType: Scratch.BlockType.COMMAND,
-            text: 'markdown[id]第[number]个[type]元素的[input]设为[text]',
+            text: 'markdown[id] 第 [number] 个 [type] 元素的 [input] 设为 [text]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               number: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
               type: { type: Scratch.ArgumentType.STRING, defaultValue: 'img' },
-              input: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'setinsite'
-              },
+              input: { type: Scratch.ArgumentType.STRING, menu: 'setinsite' },
               text: { type: Scratch.ArgumentType.STRING, defaultValue: '0' }
             }
           },
           {
             opcode: 'transition',
             blockType: Scratch.BlockType.COMMAND,
-            text: '为markdown[id]设置过渡为[s]秒的[timing]',
+            text: '为 markdown[id] 设置过渡为 [s] 秒的 [timing]',
             arguments: {
               id: { type: Scratch.ArgumentType.STRING, defaultValue: 'i' },
               s: { type: Scratch.ArgumentType.NUMBER, defaultValue: '1' },
-              timing: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'timing'
-              }
-            }
-          },
-          {
-            opcode: 'autoscale',
-            blockType: Scratch.BlockType.COMMAND,
-            text: '表格自动缩放[enable]',
-            arguments: {
-              enable: {
-                type: Scratch.ArgumentType.STRING,
-                menu: 'typess'
-              }
+              timing: { type: Scratch.ArgumentType.STRING, menu: 'timing' }
             }
           },
           {
@@ -2301,23 +1952,9 @@
             blockType: Scratch.BlockType.BUTTON,
             text: '📖拓展教程',
             func: 'openDocs'
-          },{
-            opcode: 'openDocs2',
-            blockType: Scratch.BlockType.BUTTON,
-            text: '📖拓展教程2',
-            func: 'openDocs2'
           }
-          
         ],
         menus: {
-          fileList: {
-            acceptReporters: true,
-            items: '_getFileMenu'
-          },
-          autoline: [
-            { text: '启用', value: 'true' },
-            { text: '禁用', value: 'false' }
-          ],
           type: [
             { text: 'X', value: 'x' },
             { text: 'Y', value: 'y' },
@@ -2359,7 +1996,7 @@
             { text: '高', value: 'height' }
           ],
           clickmenu: [
-            { text: 'markdown来源', value: 'markdown' },
+            { text: 'markdown 来源', value: 'markdown' },
             { text: '类型', value: 'type' },
             { text: '序号', value: 'number' }
           ],
@@ -2382,6 +2019,7 @@
             { text: '文本', value: 'p' },
             { text: '粗体', value: 'strong' },
             { text: '斜体', value: 'em' },
+            { text: '删除线', value: 'del' },
             { text: '大号', value: 'h3' },
             { text: '更大号', value: 'h2' },
             { text: '超大号', value: 'h1' },
@@ -2393,138 +2031,14 @@
       };
     }
 
-    _getFileMenu() {
-        if (this.fileSystem.length === 0) {
-            return [{ text: '无文件', value: '' }];
-        }
-        return this.fileSystem.map(f => ({ text: f.name, value: f.name }));
-    }
-
     _initEventListeners() {
       if (typeof window !== 'undefined') {
         window.addEventListener('mousedown', (e) => {
           this.markdownmousedown = e;
         });
-
         window.addEventListener('mousemove', (e) => {
           this.touchEvent = e;
         });
-
-        window.addEventListener('click', (e) => {
-          if (!e || !e.target) return;
-          const btn = e.target.closest('.wc-trigger-btn');
-          
-          if (btn) {
-             const id = btn.getAttribute('data-trigger-id');
-             const interval = parseFloat(btn.getAttribute('data-trigger-interval') || 0) * 1000;
-             const now = Date.now();
-             const last = this._triggerTimestamps[id] || 0;
-             
-             if (now - last >= interval) {
-                 this._triggerTimestamps[id] = now;
-                 if (Scratch.vm && Scratch.vm.runtime) {
-                     this._activeTriggerId = id;
-                     this._activeTriggers.add(id); 
-                     Scratch.vm.runtime.startHats('WitCatMarkDown_whenTrigger');
-                     setTimeout(() => {
-                         this._activeTriggerId = null;
-                         this._activeTriggers.delete(id);
-                     }, 50);
-                 }
-             }
-          }
-        });
-
-        window.addEventListener('click', async (e) => {
-          try {
-            if (!e || !e.target) return;
-            var t = e.target;
-            if (!(t instanceof HTMLElement)) return;
-            if (!t.classList.contains('WitCatMarkDownCopyBtn')) return;
-
-            var pre = t.closest('pre');
-            if (!pre) return;
-
-            var codeEl = pre.querySelector('code');
-            var text = codeEl ? codeEl.innerText : pre.innerText;
-
-            if (text) {
-              text = String(text);
-            } else {
-              text = '';
-            }
-
-            if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-              await navigator.clipboard.writeText(text);
-              t.setAttribute('data-state', 'copied');
-              t.innerText = (t.innerText === 'copy' ? 'copied' : '已复制');
-              setTimeout(function () {
-                t.setAttribute('data-state', '');
-                t.innerText = (t.innerText === 'copied' ? 'copy' : '复制');
-              }, 800);
-            } else {
-              var ta = document.createElement('textarea');
-              ta.value = text;
-              ta.style.position = 'fixed';
-              ta.style.left = '-9999px';
-              ta.style.top = '0';
-              document.body.appendChild(ta);
-              ta.focus();
-              ta.select();
-              var ok = false;
-              try {
-                ok = document.execCommand('copy');
-              } catch (err) {
-                ok = false;
-              }
-              document.body.removeChild(ta);
-              if (ok) {
-                t.setAttribute('data-state', 'copied');
-                t.innerText = (t.innerText === 'copy' ? 'copied' : '已复制');
-                setTimeout(function () {
-                  t.setAttribute('data-state', '');
-                  t.innerText = (t.innerText === 'copied' ? 'copy' : '复制');
-                }, 800);
-              } else {
-                t.setAttribute('data-state', 'failed');
-                t.innerText = (t.innerText === 'copy' ? 'failed' : '复制失败');
-                setTimeout(function () {
-                  t.setAttribute('data-state', '');
-                  t.innerText = (t.innerText === 'failed' ? 'copy' : '复制');
-                }, 800);
-              }
-            }
-          } catch (err) {
-            console.error('Copy code failed:', err);
-          }
-        }, true);
-
-        // 使用防抖优化resize事件，避免高频触发重绘
-        window.addEventListener('resize', _debounce(() => {
-          this._adjustTables();
-        }, 150));
-
-        if (typeof MutationObserver !== 'undefined') {
-          // 使用节流优化MutationObserver回调
-          const throttledAdjust = _throttle(() => this._adjustTables(), 200);
-          this.autoScaleObserver = new MutationObserver((mutations) => {
-            let shouldAdjust = false;
-            for (const mutation of mutations) {
-              if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                shouldAdjust = true;
-                break;
-              }
-            }
-            if (shouldAdjust) {
-              throttledAdjust();
-            }
-          });
-          
-          this.autoScaleObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-          });
-        }
       }
     }
 
@@ -2549,275 +2063,21 @@
         .WitCatMarkDownpolier button{ background-color: #00000000; color: #1A96E2; position: absolute; right: 0px; bottom: 0px; border-radius: 0.5em; }
         .WitCatMarkDownHide{ background-color: #252525; color: #252525; text-shadow: none; border-radius: 0.5em; }
         .WitCatMarkDownHide:hover{ color: white !important; }
-        .WitCatMarkDowng-container { width: 240px; height: 100px; border-radius: 0.5em; background: #eee; }
+        .WitCatMarkDowng-container { width: 240px; height: 10px; border-radius: 0.5em; background: #eee; }
         .WitCatMarkDowng-progress { width: 50%; height: inherit; border-radius: 0.5em; background: #0f0; }
-        
-        .wc-editor-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 10000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: sans-serif;
-        }
-        .wc-editor-window {
-            width: 90%;
-            height: 90%;
-            background: #fff;
-            border-radius: 8px;
-            display: flex;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        .wc-editor-sidebar {
-            width: 250px;
-            background: #f5f5f5;
-            border-right: 1px solid #ddd;
-            display: flex;
-            flex-direction: column;
-        }
-        .wc-editor-sidebar-header {
-            padding: 10px;
-            border-bottom: 1px solid #ddd;
-            font-weight: bold;
-            background: #e9e9e9;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .wc-editor-file-list {
-            flex: 1;
-            overflow-y: auto;
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        .wc-editor-file-item {
-            padding: 10px;
-            cursor: pointer;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-        }
-        .wc-editor-file-item:hover { background: #e0e0e0; }
-        .wc-editor-file-item.active { background: #1A96E2; color: #fff; }
-        .wc-editor-file-controls {
-            padding: 10px;
-            display: flex;
-            gap: 5px;
-            border-top: 1px solid #ddd;
-        }
-        .wc-editor-btn {
-            padding: 5px 10px;
-            border: 1px solid #ccc;
-            background: #fff;
-            border-radius: 4px;
-            cursor: pointer;
-            flex: 1;
-            font-size: 12px;
-        }
-        .wc-editor-btn:hover { background: #f0f0f0; }
-        .wc-editor-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        .wc-editor-toolbar {
-            padding: 8px;
-            border-bottom: 1px solid #ddd;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-            background: #fafafa;
-        }
-        .wc-editor-toolbar-btn {
-            padding: 4px 8px;
-            border: 1px solid #ccc;
-            background: #fff;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        .wc-editor-toolbar-btn:hover { background: #1A96E2; color: #fff; border-color: #1A96E2; }
-        
-        .wc-editor-split-view {
-            flex: 1;
-            display: flex;
-            height: 100%;
-            overflow: hidden;
-        }
-        .wc-editor-area {
-            width: 50%;
-            padding: 15px;
-            border: none;
-            border-right: 1px solid #ddd;
-            resize: none;
-            font-family: monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            outline: none;
-            transition: background-color 0.2s;
-        }
-        .wc-editor-preview {
-            width: 50%;
-            padding: 15px;
-            overflow: auto;
-            background: #fff;
-        }
-
-        .wc-editor-footer {
-            padding: 10px;
-            border-top: 1px solid #ddd;
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            background: #f9f9f9;
-        }
-        .wc-file-action { font-size: 10px; cursor: pointer; margin-left: 5px; opacity: 0.7; }
-        .wc-file-action:hover { opacity: 1; }
-
-        .wc-rule-window { width: 600px; height: 500px; display: flex; flex-direction: column; padding:0; }
-        .wc-rule-header { padding: 10px; background: #e9e9e9; font-weight: bold; border-bottom: 1px solid #ddd; display:flex; justify-content:space-between; }
-        .wc-rule-controls { padding: 10px; background: #f9f9f9; border-bottom: 1px solid #ddd; display: flex; gap: 5px; flex-wrap: wrap; }
-        .wc-rule-input { padding: 5px; border: 1px solid #ccc; border-radius: 4px; flex: 1; font-family: monospace; }
-        .wc-rule-list { flex: 1; overflow-y: auto; padding: 0; margin: 0; list-style: none; background: #fff; }
-        .wc-rule-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        .wc-rule-item:hover { background: #f5f5f5; }
-        .wc-rule-info { flex: 1; overflow: hidden; }
-        .wc-rule-match { color: #d32f2f; font-family: monospace; font-weight: bold; }
-        .wc-rule-arrow { margin: 0 5px; color: #999; }
-        .wc-rule-replace { color: #388e3c; font-family: monospace; }
-        .wc-rule-test-area { padding: 10px; border-top: 1px solid #ddd; background: #fafafa; display:flex; flex-direction:column; gap:5px; height: 120px; }
-        .wc-rule-test-output { flex:1; border:1px solid #eee; background:#fff; padding:5px; overflow:auto; }
-
-        .wc-trigger-btn {
-          cursor: pointer;
-          color: #1A96E2;
-          text-decoration: none;
-          background: #f0f7ff;
-          border: 1px solid #1A96E2;
-          border-radius: 4px;
-          padding: 2px 6px;
-          font-family: inherit;
-          font-size: 0.9em;
-          margin: 0 2px;
-          display: inline-block;
-          transition: all 0.2s;
-        }
-        .wc-trigger-btn:hover {
-          background: #1A96E2;
-          color: white;
-        }
-        .wc-trigger-btn:active {
-          transform: translateY(1px);
-        }
-
-        .WitCatMarkDown.auto-linebreak p,
-        .WitCatMarkDown.auto-linebreak li,
-        .WitCatMarkDown.auto-linebreak td,
-        .WitCatMarkDown.auto-linebreak th {
-          word-wrap: break-word;
-          overflow-wrap: break-word;
-          white-space: normal;
-        }
-        
-        .WitCatMarkDown.no-linebreak p,
-        .WitCatMarkDown.no-linebreak li,
-        .WitCatMarkDown.no-linebreak td,
-        .WitCatMarkDown.no-linebreak th {
-          white-space: nowrap;
-        }
-
-        .WitCatMarkDown.math-beautify {
-          font-variant-numeric: lining-nums;
-        }
-        .WitCatMarkDown.math-beautify .WitCatMath,
-        .WitCatMarkDown.math-beautify .WitCatMathInline {
-          font-family: "Cambria Math","STIX Two Math","Latin Modern Math","Times New Roman",serif;
-          letter-spacing: 0.02em;
-        }
-        .WitCatMarkDown.math-beautify sup {
-          font-size: 0.75em;
-          line-height: 0;
-          vertical-align: super;
-        }
-        .WitCatMarkDown.math-beautify sub {
-          font-size: 0.75em;
-          line-height: 0;
-          vertical-align: sub;
-        }
-        
-        .WitCatMarkDownTableContainer {
-          width: 100%;
-          margin: 1em 0;
-          overflow-x: auto;
-          position: relative;
-          background: transparent !important;
-        }
-        
-        .WitCatMarkDownTable {
-          border: 1px solid rgba(0, 0, 0, 0.2);
-          border-collapse: collapse;
-          width: auto;
-          min-width: 100%;
-          table-layout: auto;
-          background: transparent !important;
-        }
-        
-        .WitCatMarkDownTable th,
-        .WitCatMarkDownTable td {
-          border: 1px solid rgba(0, 0, 0, 0.2);
-          padding: 8px;
-          text-align: left;
-          min-width: 60px;
-          background: transparent !important;
-        }
-        
-        .WitCatMarkDownTable th {
-          background-color: rgba(242, 242, 242, 0.5) !important;
-          font-weight: bold;
-        }
-        
-        .WitCatMarkDownTable tr {
-          background: transparent !important;
-        }
-        
-        .WitCatMarkDownTable tr:hover {
-          background-color: rgba(245, 245, 245, 0.5) !important;
-        }
-        
-        .WitCatMarkDownTable.auto-scaled {
-          width: 100% !important;
-          table-layout: fixed;
-        }
-        
-        .WitCatMarkDownTable.auto-scaled th,
-        .WitCatMarkDownTable.auto-scaled td {
-          padding: 12px 16px;
-        }
-        
-        .WitCatMarkDownTableContainer::-webkit-scrollbar {
-          height: 8px;
-          background: rgba(241, 241, 241, 0.5);
-        }
-        
-        .WitCatMarkDownTableContainer::-webkit-scrollbar-thumb {
-          background: rgba(136, 136, 136, 0.7);
-          border-radius: 4px;
-        }
-        
-        .WitCatMarkDownTableContainer::-webkit-scrollbar-thumb:hover {
-          background: rgba(85, 85, 85, 0.8);
-        }
-
+        .WitCatMarkDownTable{ border: 1px solid black; border-collapse: separate; }
+        .WitCatMarkDownTable td, .WitCatMarkDownTable th{ border: 1px solid black; padding: 8px; }
+        .WitCatMarkDownTable th{ background: #f4f4f4; font-weight: bold; }
+        .WitCatMarkDown del{ text-decoration: line-through; color: #888; }
+        .WitCatMarkDown dl{ margin: 1em 0; }
+        .WitCatMarkDown dt{ font-weight: bold; margin-top: 0.5em; }
+        .WitCatMarkDown dd{ margin-left: 2em; margin-bottom: 0.3em; }
         code[class*=language-], pre[class*=language-] { color: #000; background: 0 0; text-shadow: 0 1px #fff; font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace; font-size: 1em; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; word-wrap: normal; line-height: 1.5; -moz-tab-size: 4; -o-tab-size: 4; tab-size: 4; -webkit-hyphens: none; -moz-hyphens: none; -ms-hyphens: none; hyphens: none; }
+        code[class*=language-] ::-moz-selection, code[class*=language-]::-moz-selection, pre[class*=language-] ::-moz-selection, pre[class*=language-]::-moz-selection { text-shadow: none; background: #b3d4fc; }
         code[class*=language-] ::selection, code[class*=language-]::selection, pre[class*=language-] ::selection, pre[class*=language-]::selection { text-shadow: none; background: #b3d4fc; }
-        code[class*=language-] ::selection, code[class*=language-]::selection, pre[class*=language-] ::selection, pre[class*=language-]::-selection { text-shadow: none; background: #b3d4fc; }
         @media print { code[class*=language-], pre[class*=language-] { text-shadow: none; } }
-        pre[class*=language-] { padding: 1em; margin: .5em 0; overflow: auto; }
-        :not(pre)>code[class*=language-], pre[class*=language-] { background: transparent !important; }
+        pre[class*=language-] { padding: 1em; margin: .5em 0; overflow: auto; background: #f7f7f7; border-radius: 0.3em; }
+        :not(pre)>code[class*=language-], pre[class*=language-] { background: #f7f7f7; }
         :not(pre)>code[class*=language-] { padding: .1em; border-radius: .3em; white-space: normal; }
         .token.cdata, .token.comment, .token.doctype, .token.prolog { color: #708090; }
         .token.punctuation { color: #999; }
@@ -2834,46 +2094,6 @@
         .token a { color: inherit; }
         span.inline-color-wrapper { background: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyIDIiPjxwYXRoIGZpbGw9ImdyYXkiIGQ9Ik0wIDBoMnYySDB6Ii8+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0wIDBoMXYxSDB6TTEgMWgxdjFIMXoiLz48L3N2Zz4=); background-position: center; background-size: 110%; display: inline-block; height: 1.333ch; width: 1.333ch; margin: 0 .333ch; box-sizing: border-box; border: 1px solid #fff; outline: 1px solid rgba(0, 0, 0, .5); overflow: hidden; }
         span.inline-color { display: block; height: 120%; width: 120%; }
-
-        .WitCatMarkDown pre{ position: relative; }
-        .WitCatMarkDownCopyBtn{
-          position:absolute;
-          top:6px;
-          right:6px;
-          font-size:12px;
-          padding:4px 8px;
-          border-radius:6px;
-          border:1px solid rgba(0,0,0,0.2);
-          background: rgba(255,255,255,0.85);
-          color:#1A96E2;
-          cursor:pointer;
-          user-select:none;
-        }
-        .WitCatMarkDownCopyBtn:hover{
-          background: rgba(255,255,255,1);
-        }
-        .WitCatMarkDownCopyBtn[data-state="copied"]{
-          color:#1c7321;
-          border-color: rgba(28,115,33,0.35);
-        }
-        .WitCatMarkDownCopyBtn[data-state="failed"]{
-          color:#c00;
-          border-color: rgba(204,0,0,0.35);
-        }
-
-        .WitCatMarkDown u {
-          text-decoration: underline;
-        }
-        .WitCatMarkDown s {
-          text-decoration: line-through;
-        }
-        .WitCatMarkDownRight {
-          display: inline-block;
-          float: right;
-        }
-        .WitCatTag-warning { color: #b45309; font-weight: bold; }
-        .WitCatTag-note { color: #2563eb; }
-        .WitCatTag-tip { color: #059669; font-style: italic; }
       `;
       
       if (document.head) {
@@ -2890,790 +2110,6 @@
       
       if (document.body) {
         document.body.appendChild(script);
-      }
-    }
-
-    _initEditor() {
-        if (typeof document === 'undefined') return;
-        
-        if (document.getElementById('WitCatEditorPanel')) return;
-
-        const html = `
-        <div id="WitCatEditorPanel" class="wc-editor-overlay" style="display: none;">
-            <div class="wc-editor-window">
-                <div class="wc-editor-sidebar">
-                    <div class="wc-editor-sidebar-header">
-                        <span>文件列表</span>
-                        <input type="file" id="wc-import-file" style="display:none;" accept=".txt,.md">
-                        <button class="wc-editor-btn" onclick="document.getElementById('wc-import-file').click()">导入TXT</button>
-                    </div>
-                    <ul class="wc-editor-file-list" id="wc-file-list"></ul>
-                    <div class="wc-editor-file-controls">
-                        <button class="wc-editor-btn" id="wc-btn-new">新建</button>
-                        <button class="wc-editor-btn" id="wc-btn-copy-md">复制 MD</button>
-                    </div>
-                </div>
-                <div class="wc-editor-main">
-                    <div class="wc-editor-toolbar" id="wc-toolbar"></div>
-                    <div class="wc-editor-split-view">
-                        <textarea class="wc-editor-area" id="wc-editor-textarea" placeholder="在此输入 Markdown... 可以拖入本地图片转Base64"></textarea>
-                        <div id="wc-editor-preview" class="WitCatMarkDown wc-editor-preview"></div>
-                    </div>
-                    <div class="wc-editor-footer">
-                        <button class="wc-editor-btn" id="wc-btn-save">保存当前文件</button>
-                        <button class="wc-editor-btn" style="background:#fcecec;border-color:#f5c6c6;" id="wc-btn-close">关闭面板</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        `;
-        
-        const div = document.createElement('div');
-        div.innerHTML = html;
-        document.body.appendChild(div.firstElementChild);
-
-        document.getElementById('wc-btn-close').onclick = () => {
-            document.getElementById('WitCatEditorPanel').style.display = 'none';
-        };
-        
-        document.getElementById('wc-btn-new').onclick = () => {
-            const name = prompt('文件名:', 'new_file.md');
-            if(name) {
-                this.fileSystem.push({ name: name, content: '' });
-                this.currentFileIndex = this.fileSystem.length - 1;
-                this._renderFileList();
-                this._loadCurrentFile();
-            }
-        };
-
-        document.getElementById('wc-btn-save').onclick = () => {
-            const content = document.getElementById('wc-editor-textarea').value;
-            if(this.fileSystem[this.currentFileIndex]) {
-                this.fileSystem[this.currentFileIndex].content = content;
-                alert('已保存!');
-            }
-        };
-
-        document.getElementById('wc-btn-copy-md').onclick = () => {
-            const content = document.getElementById('wc-editor-textarea').value;
-            navigator.clipboard.writeText(content).then(() => alert('Markdown 内容已复制到剪贴板'));
-        };
-
-        document.getElementById('wc-import-file').onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                this.fileSystem.push({ name: file.name, content: e.target.result });
-                this.currentFileIndex = this.fileSystem.length - 1;
-                this._renderFileList();
-                this._loadCurrentFile();
-            };
-            reader.readAsText(file);
-            e.target.value = ''; 
-        };
-
-        const textarea = document.getElementById('wc-editor-textarea');
-        const preview = document.getElementById('wc-editor-preview');
-
-        // 使用防抖优化预览更新
-        const debouncedUpdate = _debounce(() => {
-             const content = textarea.value;
-             
-             if(this.fileSystem[this.currentFileIndex]) {
-                 this.fileSystem[this.currentFileIndex].content = content;
-             }
-
-             preview.innerHTML = this.markdownExpose.toHTML(content);
-             
-             this._addCopyButtons(preview);
-             this._applyMathBeautify(preview);
-             if (window.Prism && window.Prism.highlightAllUnder) {
-                 window.Prism.highlightAllUnder(preview);
-             }
-             this._adjustTables();
-        }, 300);
-
-        textarea.addEventListener('input', debouncedUpdate);
-
-        // 拖拽本地图片转 Base64 语法
-        textarea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            textarea.style.backgroundColor = '#f0f7ff';
-        });
-
-        textarea.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            textarea.style.backgroundColor = '';
-        });
-
-        textarea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            textarea.style.backgroundColor = '';
-            
-            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                const file = e.dataTransfer.files[0];
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        const base64 = event.target.result;
-                        const start = textarea.selectionStart;
-                        const end = textarea.selectionEnd;
-                        const text = textarea.value;
-                        const imgSyntax = `![${file.name}](${base64})`;
-                        
-                        textarea.value = text.substring(0, start) + imgSyntax + text.substring(end);
-                        textarea.selectionStart = textarea.selectionEnd = start + imgSyntax.length;
-                        
-                        textarea.dispatchEvent(new Event('input'));
-                    };
-                    reader.readAsDataURL(file);
-                }
-            }
-        });
-
-        // 剪贴板粘贴本地图片转 Base64 语法
-        textarea.addEventListener('paste', (e) => {
-            if (e.clipboardData && e.clipboardData.items) {
-                const items = e.clipboardData.items;
-                for (let i = 0; i < items.length; i++) {
-                    if (items[i].type.startsWith('image/')) {
-                        const file = items[i].getAsFile();
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                            const base64 = event.target.result;
-                            const start = textarea.selectionStart;
-                            const end = textarea.selectionEnd;
-                            const text = textarea.value;
-                            const imgSyntax = `![image](${base64})`;
-                            
-                            textarea.value = text.substring(0, start) + imgSyntax + text.substring(end);
-                            textarea.selectionStart = textarea.selectionEnd = start + imgSyntax.length;
-                            
-                            textarea.dispatchEvent(new Event('input'));
-                        };
-                        reader.readAsDataURL(file);
-                        e.preventDefault();
-                        break;
-                    }
-                }
-            }
-        });
-
-        let isSyncingLeftScroll = false;
-        let isSyncingRightScroll = false;
-
-        textarea.addEventListener('scroll', function() {
-            if (!isSyncingLeftScroll) {
-                isSyncingRightScroll = true;
-                const percentage = this.scrollTop / (this.scrollHeight - this.clientHeight);
-                preview.scrollTop = percentage * (preview.scrollHeight - preview.clientHeight);
-                setTimeout(() => isSyncingRightScroll = false, 50); 
-            }
-        });
-
-        preview.addEventListener('scroll', function() {
-            if (!isSyncingRightScroll) {
-                isSyncingLeftScroll = true;
-                const percentage = this.scrollTop / (this.scrollHeight - this.clientHeight);
-                textarea.scrollTop = percentage * (textarea.scrollHeight - textarea.clientHeight);
-                setTimeout(() => isSyncingLeftScroll = false, 50);
-            }
-        });
-
-        this._initToolbar();
-        this._renderFileList();
-        this._loadCurrentFile();
-    }
-
-    _initRulePanel() {
-        if (typeof document === 'undefined') return;
-        if (document.getElementById('WitCatRulePanel')) return;
-
-        const html = `
-        <div id="WitCatRulePanel" class="wc-editor-overlay" style="display: none;">
-            <div class="wc-editor-window wc-rule-window">
-                <div class="wc-rule-header">
-                    <span>自定义规则管理</span>
-                    <button class="wc-editor-btn" style="flex:0 0 50px;background:#fcecec;border-color:#f5c6c6;" onclick="document.getElementById('WitCatRulePanel').style.display='none'">关闭</button>
-                </div>
-                <div class="wc-rule-controls" style="border-bottom:none;">
-                    <span style="font-weight:bold;flex:1;display:flex;align-items:center;">解析顺序(拖动排序)</span>
-                    <button class="wc-editor-btn" style="flex:0 0 60px;" id="wc-pipe-reset-btn">重置</button>
-                </div>
-                <ul id="wc-pipe-list" class="wc-rule-list" style="max-height:160px; border-bottom:1px solid #ddd;"></ul>
-                <div class="wc-rule-controls">
-                    <input id="wc-rule-match-input" class="wc-rule-input" placeholder="匹配正则 (如 \\[tag\\](.*?)\\[/tag\\])">
-                    <input id="wc-rule-replace-input" class="wc-rule-input" placeholder="替换内容 (如 <b>$1</b>)">
-                    <button class="wc-editor-btn" style="flex:0 0 60px;" id="wc-rule-add-btn">添加</button>
-                </div>
-                <div class="wc-rule-controls" style="border-top:none;">
-                    <input id="wc-rule-search" class="wc-rule-input" placeholder="搜索规则...">
-                    <button class="wc-editor-btn" id="wc-rule-import-btn">导入JSON</button>
-                    <button class="wc-editor-btn" id="wc-rule-export-btn">导出JSON</button>
-                    <button class="wc-editor-btn" style="background:#fcecec;" id="wc-rule-clear-btn">清空所有</button>
-                    <input type="file" id="wc-rule-import-file" style="display:none;" accept=".json">
-                </div>
-                <ul id="wc-rule-list" class="wc-rule-list"></ul>
-                <div class="wc-rule-test-area">
-                    <input id="wc-rule-test-input" class="wc-rule-input" placeholder="在此输入测试文本查看效果...">
-                    <div id="wc-rule-test-output" class="WitCatMarkDown wc-rule-test-output">预览结果</div>
-                </div>
-            </div>
-        </div>
-        `;
-        
-        const div = document.createElement('div');
-        div.innerHTML = html;
-        document.body.appendChild(div.firstElementChild);
-
-        const listEl = document.getElementById('wc-rule-list');
-        const matchInput = document.getElementById('wc-rule-match-input');
-        const replaceInput = document.getElementById('wc-rule-replace-input');
-        const searchInput = document.getElementById('wc-rule-search');
-        const testInput = document.getElementById('wc-rule-test-input');
-        const testOutput = document.getElementById('wc-rule-test-output');
-        const pipeListEl = document.getElementById('wc-pipe-list');
-
-        const savePipelineOrder = () => {
-          try {
-            const dataToSave = this.markdownExpose.pipeline.map(x => ({ id: x.id, enabled: x.enabled }));
-            localStorage.setItem('WitCatMarkDown_pipeline', JSON.stringify(dataToSave));
-          } catch (e) {}
-        };
-
-        const renderPipeline = () => {
-          const pipe = this.markdownExpose.pipeline || [];
-          pipeListEl.innerHTML = '';
-
-          pipe.forEach((step, index) => {
-            const li = document.createElement('li');
-            li.className = 'wc-rule-item';
-            li.draggable = true;
-            li.dataset.index = String(index);
-            li.style.cursor = 'grab';
-
-            let extra = '';
-            if (step.id === 'customRules') {
-              extra = `（${(this.markdownExpose.customRules || []).length}条）`;
-            }
-
-            li.innerHTML = `
-              <div class="wc-rule-info" style="pointer-events: none;">
-                <span class="wc-rule-match">${index + 1}.</span>
-                <span style="margin-left:8px; font-family: sans-serif; font-size: 13px;">${step.name}${extra}</span>
-              </div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                <span style="font-size:12px;color:#666;">启用</span>
-                <input type="checkbox" ${step.enabled === false ? '' : 'checked'}>
-              </label>
-            `;
-
-            // 启用/禁用
-            li.querySelector('input[type="checkbox"]').onchange = (e) => {
-              step.enabled = !!e.target.checked;
-              savePipelineOrder();
-              updateTestPreview();
-            };
-
-            // 拖动排序
-            li.addEventListener('dragstart', (e) => {
-              e.dataTransfer.setData('text/plain', li.dataset.index);
-              e.dataTransfer.effectAllowed = 'move';
-              li.style.opacity = '0.5';
-            });
-            li.addEventListener('dragend', (e) => {
-              li.style.opacity = '1';
-            });
-            li.addEventListener('dragover', (e) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              li.style.background = '#f0f7ff';
-            });
-            li.addEventListener('dragleave', (e) => {
-              li.style.background = '';
-            });
-            li.addEventListener('drop', (e) => {
-              e.preventDefault();
-              li.style.background = '';
-              const fromStr = e.dataTransfer.getData('text/plain');
-              if(!fromStr) return;
-              const from = Number(fromStr);
-              const to = Number(li.dataset.index);
-              if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
-
-              const arr = this.markdownExpose.pipeline;
-              const item = arr.splice(from, 1)[0];
-              arr.splice(to, 0, item);
-
-              savePipelineOrder();
-              renderPipeline();
-              updateTestPreview();
-            });
-
-            pipeListEl.appendChild(li);
-          });
-        };
-
-        document.getElementById('wc-pipe-reset-btn').onclick = () => {
-          if (!confirm('确定重置解析顺序吗？')) return;
-          localStorage.removeItem('WitCatMarkDown_pipeline');
-          location.reload();
-        };
-
-        const renderRules = () => {
-            const filter = searchInput.value.toLowerCase();
-            listEl.innerHTML = '';
-            
-            this.markdownExpose.customRules.forEach((rule, index) => {
-                const matchStr = rule.regex instanceof RegExp ? rule.regex.source : String(rule.match || rule.regex);
-                const replaceStr = rule.replace;
-
-                if (filter && !matchStr.toLowerCase().includes(filter) && !replaceStr.toLowerCase().includes(filter)) {
-                    return;
-                }
-
-                const li = document.createElement('li');
-                li.className = 'wc-rule-item';
-                li.innerHTML = `
-                    <div class="wc-rule-info">
-                        <span class="wc-rule-match">${matchStr.replace(/</g, '&lt;')}</span>
-                        <span class="wc-rule-arrow">➜</span>
-                        <span class="wc-rule-replace">${replaceStr.replace(/</g, '&lt;')}</span>
-                    </div>
-                    <button class="wc-editor-btn" style="flex:0 0 40px;margin-left:10px;">删</button>
-                `;
-                
-                li.querySelector('button').onclick = () => {
-                    this.markdownExpose.customRules.splice(index, 1);
-                    renderRules();
-                    renderPipeline();
-                    updateTestPreview();
-                };
-
-                listEl.appendChild(li);
-            });
-        };
-
-        document.getElementById('wc-rule-add-btn').onclick = () => {
-            const m = matchInput.value;
-            const r = replaceInput.value;
-            if (!m || !r) {
-                alert("请填写匹配正则和替换内容");
-                return;
-            }
-            try {
-                new RegExp(m);
-                this.addCustomRule({ match: m, replace: r });
-                matchInput.value = '';
-                replaceInput.value = '';
-                renderRules();
-                renderPipeline();
-                updateTestPreview();
-            } catch (e) {
-                alert("正则表达式错误: " + e.message);
-            }
-        };
-
-        searchInput.addEventListener('input', _debounce(renderRules, 200));
-
-        document.getElementById('wc-rule-clear-btn').onclick = () => {
-            if(confirm("确定清空所有自定义规则吗？")) {
-                this.markdownExpose.customRules = [];
-                renderRules();
-                renderPipeline();
-                updateTestPreview();
-            }
-        };
-
-        document.getElementById('wc-rule-export-btn').onclick = () => {
-            const exportData = this.markdownExpose.customRules.map(r => ({
-                match: r.regex instanceof RegExp ? r.regex.source : r.match,
-                replace: r.replace
-            }));
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], {type : 'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'witcat_rules.json';
-            a.click();
-        };
-
-        document.getElementById('wc-rule-import-btn').onclick = () => {
-            document.getElementById('wc-rule-import-file').click();
-        };
-
-        document.getElementById('wc-rule-import-file').onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-                try {
-                    const data = JSON.parse(evt.target.result);
-                    if (Array.isArray(data)) {
-                        data.forEach(item => {
-                            if (item.match && item.replace) {
-                                this.addCustomRule({ match: item.match, replace: item.replace });
-                            }
-                        });
-                        renderRules();
-                        renderPipeline();
-                        updateTestPreview();
-                        alert(`成功导入 ${data.length} 条规则`);
-                    }
-                } catch (err) {
-                    alert("导入失败: JSON格式错误");
-                }
-            };
-            reader.readAsText(file);
-            e.target.value = '';
-        };
-
-        const updateTestPreview = _debounce(() => {
-            const txt = testInput.value;
-            testOutput.innerHTML = this.markdownExpose.toHTML(txt);
-        }, 300);
-        testInput.addEventListener('input', updateTestPreview);
-
-        renderRules();
-        renderPipeline();
-    }
-
-    _initToolbar() {
-        const toolbar = document.getElementById('wc-toolbar');
-        const textarea = document.getElementById('wc-editor-textarea');
-        
-        const tools = [
-            { label: '粗体', pre: '**', suf: '**' },
-            { label: '斜体', pre: '*', suf: '*' },
-            { label: '下划线', pre: '_', suf: '_' },
-            { label: '删除线', pre: '-', suf: '-' },
-            { label: 'HTML块', pre: '[html]\n', suf: '\n[/html]' },
-            { label: '代码块', pre: '```\n', suf: '\n```' },
-            { label: '标签', pre: '[tip]', suf: '[/tip]' },
-            { label: '引用', pre: '> ', suf: '' },
-            { label: '表格', action: 'table' },
-            { label: '列表', pre: '- ', suf: '' },
-            { label: '图片', pre: '![描述](', suf: ')' },
-            { label: '链接', pre: '[文本](', suf: ')' },
-            { label: '分割线', pre: '\n***\n', suf: '' }
-        ];
-
-        tools.forEach(tool => {
-            const btn = document.createElement('button');
-            btn.className = 'wc-editor-toolbar-btn';
-            btn.innerText = tool.label;
-            btn.onclick = () => {
-                const start = textarea.selectionStart;
-                const end = textarea.selectionEnd;
-                const text = textarea.value;
-                const selected = text.substring(start, end);
-
-                if (tool.action === 'table') {
-                    const tableTemplate = `\n| 标题1 | 标题2 | 标题3 |\n|---|---|---|\n| 内容1 | 内容2 | 内容3 |\n| 内容4 | 内容5 | 内容6 |\n`;
-                    textarea.setRangeText(tableTemplate, start, end, 'end');
-                } else {
-                    textarea.setRangeText(tool.pre + selected + tool.suf, start, end, 'select');
-                }
-                
-                textarea.focus();
-                textarea.dispatchEvent(new Event('input'));
-            };
-            toolbar.appendChild(btn);
-        });
-    }
-
-    _renderFileList() {
-        const list = document.getElementById('wc-file-list');
-        list.innerHTML = '';
-        this.fileSystem.forEach((file, index) => {
-            const li = document.createElement('li');
-            li.className = 'wc-editor-file-item' + (index === this.currentFileIndex ? ' active' : '');
-            
-            const spanName = document.createElement('span');
-            spanName.innerText = file.name;
-            spanName.onclick = () => {
-                this.currentFileIndex = index;
-                this._renderFileList();
-                this._loadCurrentFile();
-            };
-
-            const divActions = document.createElement('div');
-            
-            const btnDel = document.createElement('span');
-            btnDel.className = 'wc-file-action';
-            btnDel.innerText = '❌';
-            btnDel.onclick = (e) => {
-                e.stopPropagation();
-                if(confirm(`删除 ${file.name}?`)) {
-                    this.fileSystem.splice(index, 1);
-                    if(this.currentFileIndex >= this.fileSystem.length) this.currentFileIndex = Math.max(0, this.fileSystem.length - 1);
-                    this._renderFileList();
-                    this._loadCurrentFile();
-                }
-            };
-
-            divActions.appendChild(btnDel);
-            li.appendChild(spanName);
-            li.appendChild(divActions);
-            list.appendChild(li);
-        });
-    }
-
-    _loadCurrentFile() {
-        const textarea = document.getElementById('wc-editor-textarea');
-        if (this.fileSystem.length > 0 && this.fileSystem[this.currentFileIndex]) {
-            textarea.value = this.fileSystem[this.currentFileIndex].content;
-            textarea.disabled = false;
-            textarea.dispatchEvent(new Event('input'));
-        } else {
-            textarea.value = '';
-            textarea.disabled = true;
-            document.getElementById('wc-editor-preview').innerHTML = '';
-        }
-    }
-
-    openEditor() {
-        const panel = document.getElementById('WitCatEditorPanel');
-        if(panel) {
-            panel.style.display = 'flex';
-            this._renderFileList(); 
-            this._loadCurrentFile(); 
-        }
-    }
-
-    openRuleManager() {
-        const panel = document.getElementById('WitCatRulePanel');
-        if(panel) {
-            panel.style.display = 'flex';
-            const searchInput = document.getElementById('wc-rule-search');
-            if (searchInput) {
-                searchInput.dispatchEvent(new Event('input'));
-            }
-        }
-    }
-
-    importAllFiles(args) {
-        try {
-            const data = JSON.parse(args.json);
-            if (Array.isArray(data)) {
-                this.fileSystem = data;
-                this.currentFileIndex = 0;
-                this._renderFileList();
-                this._loadCurrentFile();
-            }
-        } catch (e) {
-            console.error('Import failed', e);
-        }
-    }
-
-    exportAllFiles() {
-        return JSON.stringify(this.fileSystem);
-    }
-
-    createFromFile(args) {
-        const filename = args.filename;
-        const file = this.fileSystem.find(f => f.name === filename);
-        const content = file ? file.content : 'File not found';
-        
-        this.create({
-            id: args.id,
-            x: args.x,
-            y: args.y,
-            width: args.width,
-            height: args.height,
-            text: content
-        });
-    }
-
-    _adjustTables() {
-      try {
-        const containers = document.querySelectorAll('.WitCatMarkDownTableContainer');
-        if (!containers || !containers.length) return;
-        
-        // 性能优化：将读取属性和写入属性分离以避免强制同步布局
-        const adjustments = [];
-
-        containers.forEach((container) => {
-          const table = container.querySelector('.WitCatMarkDownTable');
-          if (!table) return;
-          
-          const containerWidth = container.offsetWidth;
-          if (!containerWidth) return;
-          
-          const tableWidth = table.offsetWidth;
-          
-          adjustments.push({ table, containerWidth, tableWidth, container });
-        });
-
-        adjustments.forEach(({ table, containerWidth, tableWidth }) => {
-          if (tableWidth < containerWidth) {
-            table.classList.add('auto-scaled');
-            table.style.width = '100%';
-            
-            const firstRow = table.querySelector('tr');
-            if (firstRow) {
-              const cellCount = firstRow.querySelectorAll('th, td').length;
-              if (cellCount > 0) {
-                const columnWidth = (100 / cellCount) + '%';
-                const cells = table.querySelectorAll('th, td');
-                cells.forEach(cell => {
-                  cell.style.width = columnWidth;
-                });
-              }
-            }
-          } else {
-            table.classList.remove('auto-scaled');
-            table.style.width = 'auto';
-            
-            const cells = table.querySelectorAll('th, td');
-            cells.forEach(cell => {
-              cell.style.width = '';
-            });
-          }
-        });
-      } catch (err) {
-        console.error('Adjust tables failed:', err);
-      }
-    }
-
-    _addCopyButtons(container) {
-      try {
-        if (!container || typeof container.querySelectorAll !== 'function') return;
-        var pres = container.querySelectorAll('pre');
-        if (!pres || !pres.length) return;
-        Array.from(pres).forEach(function (pre) {
-          if (!(pre instanceof HTMLElement)) return;
-          if (pre.querySelector('.WitCatMarkDownCopyBtn')) return;
-          var btn = document.createElement('div');
-          btn.className = 'WitCatMarkDownCopyBtn';
-          btn.setAttribute('data-state', '');
-          btn.innerText = '复制';
-          pre.appendChild(btn);
-        });
-      } catch (err) {
-        console.error('Add copy buttons failed:', err);
-      }
-    }
-
-    _updateLineBreakClass() {
-      try {
-        const markdownContainers = document.querySelectorAll('.WitCatMarkDown');
-        markdownContainers.forEach(container => {
-          if (window.WitCatMarkDownAutoLineBreak) {
-            container.classList.remove('no-linebreak');
-            container.classList.add('auto-linebreak');
-          } else {
-            container.classList.remove('auto-linebreak');
-            container.classList.add('no-linebreak');
-          }
-        });
-      } catch (err) {
-        console.error('Update line break class failed:', err);
-      }
-    }
-
-    _shouldSkipMathNode(node) {
-      try {
-        if (!node) return true;
-        var el = node.nodeType === 1 ? node : node.parentElement;
-        if (!el) return true;
-        if (el.closest && el.closest('code, pre, kbd, samp, textarea, input')) return true;
-        if (el.classList && (el.classList.contains('token'))) return true; 
-        return false;
-      } catch (e) {
-        return true;
-      }
-    }
-
-    // 预编译正则提高数学符号替换性能
-    _mathRegexes = [
-        [/!=/g, "≠"], [/>=/g, "≥"], [/<=/g, "≤"], [/->/g, "→"], [/<-/g, "←"], [/<=>/g, "↔"],
-        [/\b(infty|infinity)\b/gi, "∞"],
-        [/\bpi\b/gi, "π"], [/\btheta\b/gi, "θ"], [/\balpha\b/gi, "α"], [/\bbeta\b/gi, "β"],
-        [/\bgamma\b/gi, "γ"], [/\bdelta\b/gi, "δ"], [/\blambda\b/gi, "λ"], [/\bmu\b/gi, "μ"],
-        [/\bsigma\b/gi, "σ"], [/\bomega\b/gi, "ω"],
-        [/\bsqrt\s*\(/gi, "√("],
-        [/(\d|\))\s*\*\s*(\d|\(|[A-Za-z])/g, "$1×$2"],
-        [/([A-Za-z]|\))\s*\*\s*(\d|\(|[A-Za-z])/g, "$1·$2"],
-        [/(\d+)\s*\/\s*(\d+)/g, "$1÷$2"],
-        [/\^2/g, "²"], [/\^3/g, "³"], [/\^1/g, "¹"], [/\^0/g, "⁰"],
-        [/\+\-/g, "±"]
-    ];
-
-    _beautifyMathText(s) {
-      try {
-        s = String(s);
-        const len = this._mathRegexes.length;
-        for (let i = 0; i < len; i++) {
-            s = s.replace(this._mathRegexes[i][0], this._mathRegexes[i][1]);
-        }
-        return s;
-      } catch (e) {
-        return String(s);
-      }
-    }
-
-    _applyMathBeautify(container) {
-      try {
-        if (!container || !container.querySelectorAll) return;
-        if (window.WitCatMarkDownMathBeautify !== true) return;
-
-        if (container.classList) {
-          container.classList.add('math-beautify');
-        }
-
-        var walker = document.createTreeWalker(
-          container,
-          NodeFilter.SHOW_TEXT,
-          {
-            acceptNode: (node) => {
-              try {
-                if (!node || !node.nodeValue) return NodeFilter.FILTER_REJECT;
-                if (this._shouldSkipMathNode(node)) return NodeFilter.FILTER_REJECT;
-                if (!/[0-9+\-*/^=<>]/.test(node.nodeValue) && !/\b(pi|theta|sqrt|infty|infinity|alpha|beta|gamma|delta|lambda|mu|sigma|omega)\b/i.test(node.nodeValue)) {
-                  return NodeFilter.FILTER_REJECT;
-                }
-                return NodeFilter.FILTER_ACCEPT;
-              } catch (e) {
-                return NodeFilter.FILTER_REJECT;
-              }
-            }
-          },
-          false
-        );
-
-        var toUpdate = [];
-        var n;
-        while ((n = walker.nextNode())) {
-          toUpdate.push(n);
-        }
-
-        for (var i = 0; i < toUpdate.length; i++) {
-          var node = toUpdate[i];
-          var oldText = node.nodeValue;
-          var newText = this._beautifyMathText(oldText);
-          if (newText !== oldText) {
-            node.nodeValue = newText;
-          }
-        }
-      } catch (err) {
-        console.error('Apply math beautify failed:', err);
-      }
-    }
-
-    _updateMathBeautifyClass() {
-      try {
-        const markdownContainers = document.querySelectorAll('.WitCatMarkDown');
-        markdownContainers.forEach(container => {
-          if (window.WitCatMarkDownMathBeautify) {
-            container.classList.add('math-beautify');
-          } else {
-            container.classList.remove('math-beautify');
-          }
-        });
-      } catch (err) {
-        console.error('Update math beautify class failed:', err);
       }
     }
 
@@ -3714,15 +2150,55 @@
         a.click();
       }
     }
-    openDocs2() {
-      if (typeof window !== 'undefined') {
-        const a = document.createElement('a');
-        a.href = 'https://learn.ccw.site/article/96ade444-d0e9-4066-8541-eb17d3257f14';
-        a.rel = 'noopener noreferrer';
-        a.target = '_blank';
-        a.click();
+
+    // 新增：应用动态规则
+    _applyDynamicRules(text) {
+      if (!this.dynamicRules || this.dynamicRules.length === 0) {
+        return text;
       }
+      let result = String(text);
+      this.dynamicRules.forEach(rule => {
+        try {
+          // rule.pattern 是字符串形式的正则，rule.replacement 是替换内容
+          const regex = new RegExp(rule.pattern, 'g');
+          result = result.replace(regex, rule.replacement);
+        } catch (e) {
+          console.warn("WitCatMarkDown Rule Error:", e);
+        }
+      });
+      return result;
     }
+
+    // 新增积木实现
+    loadRules(args) {
+      const url = String(args.url);
+      if (!url) return;
+      
+      fetch(url)
+        .then(response => {
+          if (!response.ok) throw new Error('Network response was not ok');
+          return response.json();
+        })
+        .then(data => {
+          // 清空旧规则
+          this.dynamicRules = [];
+          // 解析新规则
+          // 预期 data 格式: { "regex_pattern": "replacement_html" }
+          for (const pattern in data) {
+            if (data.hasOwnProperty(pattern)) {
+              this.dynamicRules.push({
+                pattern: pattern,
+                replacement: data[pattern]
+              });
+            }
+          }
+          console.log("WitCatMarkDown: Rules loaded", this.dynamicRules.length);
+        })
+        .catch(error => {
+          console.error("WitCatMarkDown: Failed to load rules", error);
+        });
+    }
+
     create(args) {
       const inputParent = this._getInputParent();
       if (!inputParent) return;
@@ -3757,20 +2233,10 @@
       search.style.width = `${width}%`;
       search.style.height = `${height}%`;
       
-      search.innerHTML = `<div class='WitCatMarkDown'>${this.markdownExpose.toHTML(String(args.text))}</div>`;
+      // 应用动态规则后再进行 Markdown 解析
+      const processedText = this._applyDynamicRules(String(args.text));
+      search.innerHTML = `<div class='WitCatMarkDown'>${this.markdownExpose.toHTML(processedText)}</div>`;
       inputParent.appendChild(search);
-
-      this._updateLineBreakClass();
-      this._updateMathBeautifyClass();
-
-      if (search.firstChild) {
-        this._addCopyButtons(search.firstChild);
-        this._applyMathBeautify(search.firstChild);
-      }
-      
-      setTimeout(() => {
-        this._adjustTables();
-      }, 100);
       
       if (this.Prism && this.Prism.highlightAll) {
         this.Prism.highlightAll();
@@ -3809,20 +2275,9 @@
           sstyle.height = `${height}%`;
           break;
         case 'content':
-          search.innerHTML = `<div class='WitCatMarkDown'>${this.markdownExpose.toHTML(String(args.text))}</div>`;
-
-          this._updateLineBreakClass();
-          this._updateMathBeautifyClass();
-
-          if (search.firstChild) {
-            this._addCopyButtons(search.firstChild);
-            this._applyMathBeautify(search.firstChild);
-          }
-
-          setTimeout(() => {
-            this._adjustTables();
-          }, 100);
-
+          // 应用动态规则后再进行 Markdown 解析
+          const processedText = this._applyDynamicRules(String(args.text));
+          search.innerHTML = `<div class='WitCatMarkDown'>${this.markdownExpose.toHTML(processedText)}</div>`;
           if (this.Prism && this.Prism.highlightAll) {
             this.Prism.highlightAll();
           }
@@ -3841,82 +2296,6 @@
       }
     }
 
-    autoline(args) {
-      window.WitCatMarkDownAutoLineBreak = (args.enable === 'true');
-      this._updateLineBreakClass();
-    }
-
-    automath(args) {
-      window.WitCatMarkDownMathBeautify = (args.enable === 'true');
-      this._updateMathBeautifyClass();
-
-      if (window.WitCatMarkDownMathBeautify) {
-        try {
-          const outs = document.querySelectorAll('.WitCatMarkDownOut');
-          outs.forEach(out => {
-            if (out && out.firstChild) {
-              this._applyMathBeautify(out.firstChild);
-            }
-          });
-        } catch (e) {}
-      }
-    }
-
-    addCustomRule(args) {
-       try {
-         var regex = new RegExp(String(args.match), 'g');
-         this.markdownExpose.customRules.push({
-            regex: regex,
-            replace: String(args.replace),
-            match: String(args.match) 
-         });
-       } catch (e) {
-         console.error("Invalid Regex in addCustomRule", e);
-       }
-    }
-
-    clearCustomRules() {
-       this.markdownExpose.customRules = [];
-    }
-
-    importCustomRulesJSON(args) {
-        try {
-            const data = JSON.parse(args.JSON);
-            if (Array.isArray(data)) {
-                let count = 0;
-                data.forEach(item => {
-                    if (item.match && item.replace) {
-                        this.addCustomRule({ match: item.match, replace: item.replace });
-                        count++;
-                    }
-                });
-                console.log(`Imported ${count} rules from JSON.`);
-            }
-        } catch (e) {
-            console.error('Failed to import rules from JSON:', e);
-        }
-    }
-
-    importCustomRulesURL(args) {
-        return fetch(args.URL)
-            .then(response => response.json())
-            .then(data => {
-                if (Array.isArray(data)) {
-                    let count = 0;
-                    data.forEach(item => {
-                        if (item.match && item.replace) {
-                            this.addCustomRule({ match: item.match, replace: item.replace });
-                            count++;
-                        }
-                    });
-                    console.log(`Imported ${count} rules from URL.`);
-                }
-            })
-            .catch(e => {
-                console.error('Failed to import rules from URL:', e);
-            });
-    }
-
     sets(args) {
       const search = document.getElementById(`WitCatMarkDown${args.id}`);
       if (!search || Number(args.num) <= 0) return;
@@ -3929,11 +2308,11 @@
         const styleKeys = Object.keys(styles);
         let styleString = "";
         styleKeys.forEach(e => {
-          if (!styles[e].includes("url")) {
+          if (typeof styles[e] === 'string' && !styles[e].includes("url")) {
             styleString += `${e}:${styles[e]};`;
           }
         });
-        target.style = styleString;
+        target.style.cssText = styleString;
       } catch (e) {
         console.error("WitCatMarkDown", e);
       }
@@ -3982,10 +2361,10 @@
       
       if (args.type === 'true') {
         if (!this.resize) {
-          this.resize = new ResizeObserver(_debounce(() => {
+          this.resize = new ResizeObserver(() => {
             const scale = parseFloat(canvas.offsetWidth) / 360;
             document.documentElement.style.setProperty('--witcat-markdown-scale', `scale(${scale})`);
-          }, 100));
+          });
           this.resize.observe(canvas);
         }
       } else {
@@ -3993,47 +2372,6 @@
           this.resize.disconnect();
           this.resize = null;
         }
-      }
-    }
-
-    autoscale(args) {
-      if (args.enable === 'true') {
-        this._adjustTables();
-        if (this.autoScaleTimer) {
-          clearInterval(this.autoScaleTimer);
-        }
-        this.autoScaleTimer = setInterval(() => {
-          this._adjustTables();
-        }, 1000);
-      } else {
-        if (this.autoScaleTimer) {
-          clearInterval(this.autoScaleTimer);
-          this.autoScaleTimer = null;
-        }
-        const tables = document.querySelectorAll('.WitCatMarkDownTable');
-        tables.forEach(table => {
-          table.classList.remove('auto-scaled');
-          table.style.width = 'auto';
-          const cells = table.querySelectorAll('th, td');
-          cells.forEach(cell => {
-            cell.style.width = '';
-          });
-        });
-      }
-    }
-
-    whenTrigger(args) {
-      return this._activeTriggers.has(String(args.ID));
-    }
-
-    setTriggerHTML(args) {
-      const id = String(args.ID);
-      const html = String(args.HTML);
-      const buttons = document.querySelectorAll(`.wc-trigger-btn[data-trigger-id="${id}"]`);
-      if (buttons) {
-        buttons.forEach(btn => {
-          btn.innerHTML = html;
-        });
       }
     }
 
@@ -4083,16 +2421,14 @@
       const search = document.createElement('span');
       search.style.position = 'fixed';
       search.className = 'WitCatMarkDown';
-      search.innerHTML = `<div class='WitCatMarkDown'>${this.markdownExpose.toHTML(String(args.content))}</div>`;
+      // 注意：getwidth 通常用于预估尺寸，这里也应用规则以保持一致性
+      const processedContent = this._applyDynamicRules(String(args.content));
+      search.innerHTML = `<div class='WitCatMarkDown'>${this.markdownExpose.toHTML(processedContent)}</div>`;
       
       if (document.body) {
         document.body.appendChild(search);
       }
-
-      this._addCopyButtons(search);
-      this._updateMathBeautifyClass();
-      this._applyMathBeautify(search);
-
+      
       const cvsw = canvas.offsetWidth;
       const cvsh = canvas.offsetHeight;
       let outw;
@@ -4324,38 +2660,68 @@
     docss() {
       return `# 欢迎使用 Markdown 拓展
 
-这是首次使用 **Markdown 拓展** 自动生成的内容，包含 Markdown 语法和拓展介绍
+这是首次使用 **Markdown 拓展** 自动生成的内容，包含 Markdown 语法和拓展介绍。
 
 ## 文本样式
 
-加粗|**加粗1** __加粗2__ （两个下划线） 
-斜体|*斜体1*
-下划线|_下划线_
-***
-若你在写常规文本时，需要换行，直接换行是无法成功换行的。
-就像这样  
-需要换行的话，需要在一行末尾加上两个空格  
+- 加粗：**加粗 1** __加粗 2__
+- 斜体：*斜体 1* _斜体 2_
+- 删除线：~~这是删除线文本~~
+- 换行：在一行末尾加上两个空格  
 就像这样
 
 ## 引用
 
-> 白猫的markdown拓展！！！
+> 白猫的 markdown 拓展！！！
 
 ## 链接
 
-*鼠标点击*打开链接
+- 行内链接：[ccw 官网](https://www.ccw.site)
+- 引用式链接：[CCW][ccw]
+- 简写引用：[ccw][]
 
-[ccw 官网](https://www.ccw.site)
-
+[ccw]: https://www.ccw.site "CCW 创作社区"
 
 ## 图片
 
-如下：一个图片
-
 ![展示](https://m.xiguacity.cn/avatar/6173f57f48cf8f4796fc860e/dbadfc1c-3ab5-49a2-aa69-01465f3f0738.jpg?x-oss-process=image%2Fresize%2Cs_150%2Fformat%2Cwebp)
 
-*图片可拖动为文件到任意窗口使用*
+## 表格（支持合并）
 
+| 列 1 | 列 2 | 列 3 | 列 4 |
+|-----|:---:|----:|-----|
+| A   | B   | C   | D   |
+| 合并向右 > || E   | F   |
+| G   | 合并向下 ^ | H | I |
+| J   | ^         | K | L |
+
+## 围栏代码块
+
+\`\`\`javascript
+function hello(name) {
+  console.log("Hello, " + name + "!");
+}
+hello("白猫");
+\`\`\`
+
+## 定义列表
+
+Markdown
+: 一种轻量级标记语言
+
+TurboWarp
+: Scratch 的高性能分支
+: 支持自定义扩展
+
+## HTML 原始标签
+
+<div style="padding:8px;border:1px dashed #1A96E2;border-radius:6px;background:#f0f8ff;">
+这是一段 <b>原始 HTML</b>，可以写 <span style="color:red;">任意样式</span>。
+</div>
+
+## 转义字符
+
+\\*这不是斜体\\* 、\\# 这不是标题 、\\| 这不是表格
 
 ## 无序列表
 
@@ -4372,82 +2738,11 @@
    2. 项目 B
 2. 项目 2
 
-## 任务列表
-
-- [x] A 计划
-  - [x] A1 计划
-  - [ ] A2 计划
-- [ ] B 计划
-
 ## 分割线
+
 ***
 没错就是这个
-
-***
-↑是1做
-↓是2做
-分割线下面是我增加的部分
-
-
-## 表格
-
-| 姓名 | 年龄 | 城市 |
-|------|------|------|
-| 张三 | 25   | 北京 |
-| 李四 | 30   | 上海 |
-| 王五 | 28   | 广州 |
-
-复杂表格示例：
-
-| 项目 | 数量 | 单价 | 小计 |
-|------|------|------|------|
-| 苹果 | 5    | ¥3.00 | ¥15.00 |
-| 香蕉 | 8    | ¥2.50 | ¥20.00 |
-| 橙子 | 12   | ¥4.00 | ¥48.00 |
-| **总计** | **25** | | **¥83.00** |
-
-## 代码块
-
-    print("wit_cat!!!")
-    print("白猫！！！")
-## 新增：围栏代码块（带语言）
-\`\`\`python
-print("hello fenced code")
-\`\`\`
-
-## 数学符号优化示例
-
-- 2*pi*r -> 2·π·r
-- sqrt(2) -> √(2)
-- a!=b, a>=b, a<=b -> a≠b, a≥b, a≤b
-- 3^2 -> 3²
-- 1/2 -> 1÷2
-
-
-- 删除线：-文字-
-- 简单标签：[warning]警告内容[/warning]  [note]注释内容[/note]  [tip]提示内容[/tip]
-
-## 交互触发器 
-
-{trigger=0.5}[点击这里触发事件](myEvent)
-
-*点击上方按钮，可以触发【当触发器 ID [myEvent] 被点击】积木*
-## 自定义解析 
-
-- 颜色: [color=red]红色文字[/color] [color=#00cc00]Hex颜色[/color]
-- 背景: [bg=yellow]高亮背景[/bg]
-- 大小: [size=20px]大号文字[/size]
-- 居中: [center]居中文字[/center]
-
-## HTML 原生代码块 (危险)
-[html]
-<div style="background:#eee;padding:10px;border-radius:5px;">
-  <button onclick="alert('Hello from WitCatMarkDown!')" style="padding:5px 10px;cursor:pointer;">点击测试 JS</button>
-  <span style="color:red;font-weight:bold;margin-left:10px;">这是原生 HTML 渲染！</span>
-</div>
-[/html]
-
-`;
+***`;
     }
 
     _getattrib(element, type) {
@@ -4489,5 +2784,8 @@ print("hello fenced code")
     }
   }
 
+  // 注册扩展
   Scratch.extensions.register(new WitCatMarkDownExtension());
 })(Scratch);
+
+增加KaTeX 支持
