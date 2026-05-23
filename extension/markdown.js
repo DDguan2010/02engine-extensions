@@ -1,7 +1,7 @@
 // ==TurboWarp==
 // @name WitCatMarkDown
 // @version 1.2.0
-// @description 更优雅的文本框 / Make your text box more colorful (支持动态解析规则)
+// @description 更优雅的文本框 / Make your text box more colorful 
 // @homepage https://www.ccw.site/student/6173f57f48cf8f4796fc860e
 // @author 白猫 @ CCW
 // ==/TurboWarp==
@@ -2787,5 +2787,3 @@ TurboWarp
   // 注册扩展
   Scratch.extensions.register(new WitCatMarkDownExtension());
 })(Scratch);
-
-增加KaTeX 支持
