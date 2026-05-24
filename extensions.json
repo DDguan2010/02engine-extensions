@@ -786,26 +786,6 @@
             "docs": false
         },
         {
-            "slug": "寻路",
-            "id": "寻路",
-            "name": "寻路",
-            "description": "寻路。",
-            "nameTranslations": {
-                "zh-cn": "寻路"
-            },
-            "image": "寻路.jpg",
-            "by": [
-                {
-                "name": "yuan",
-                "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
-                }
-            ],
-            "docs": true,
-            "samples": [
-                "寻路"
-            ]
-        },
-        {
             "slug": "musicplus",
             "id": "musicplus",
             "name": "音乐 +",
