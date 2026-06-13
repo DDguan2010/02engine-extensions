@@ -852,7 +852,7 @@
             "docs": false,
         },
         {
-            "slug": "寻路",
+            "slug": "寻路7.0.0",
             "id": "寻路",
             "name": "寻路",
             "description": "一个高性能的寻路扩展",
@@ -870,7 +870,7 @@
                 },
                 {
                 "name": "朱元翔",
-                "link": "https://space.bilibili.com/3546902484224452?spm_id_from=333.1387.0.0"
+                "link": "https://space.bilibili.com/3546902484224452?spm_id_from=333.138"
                 }
             ],
             "docs": false,
