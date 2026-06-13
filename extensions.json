@@ -849,8 +849,34 @@
                 "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
                 }
             ],
-            "scratchCompatible": false,
-            "docs": false
+            "docs": false,
+        },
+        {
+            "slug": "寻路",
+            "id": "寻路",
+            "name": "寻路",
+            "description": "一个高性能的寻路扩展",
+            "nameTranslations": {
+                "zh-cn": "一个高性能的寻路扩展"
+            },
+            "descriptionTranslations": {
+                "zh-cn": "一个高性能的寻路扩展"
+            },
+            "image": "寻路.svg",
+            "by": [
+                {
+                "name": "Arkos(使兼容)",
+                "link": "https://space.bilibili.com/446532545?spm_id_from=333.337.0.0"
+                },
+                {
+                "name": "朱元翔",
+                "link": "https://space.bilibili.com/3546902484224452?spm_id_from=333.1387.0.0"
+                }
+            ],
+            "docs": false,
+            "samples": [
+                "寻路"
+            ]
         }
     ]
 }
