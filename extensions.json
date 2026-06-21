@@ -879,15 +879,13 @@
             ]
         },
         {
-            "slug": "寻路7.0.0",
-            "id": "寻路",
-            "name": "寻路",
-            "description": "一个高性能的寻路扩展",
-            "nameTranslations": {
-                "zh-cn": "一个高性能的寻路扩展"
-            },
+            "slug": "mdui弹窗",
+            "id": "mdui弹窗",
+            "name": "mdui弹窗",
+            "description": "mdui弹窗转载已通过原作者同意",
+            
             "descriptionTranslations": {
-                "zh-cn": "一个高性能的寻路扩展"
+                "zh-cn": "mdui弹窗转载通过原作者同意"
             },
             "image": "mdui.png",
             "by": [
