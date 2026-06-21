@@ -877,6 +877,25 @@
             "samples": [
                 "寻路"
             ]
+        },
+        {
+            "slug": "寻路7.0.0",
+            "id": "寻路",
+            "name": "寻路",
+            "description": "一个高性能的寻路扩展",
+            "nameTranslations": {
+                "zh-cn": "一个高性能的寻路扩展"
+            },
+            "descriptionTranslations": {
+                "zh-cn": "一个高性能的寻路扩展"
+            },
+            "image": "mdui.png",
+            "by": [
+                {
+                "name": "不想上学",
+                }
+            ],
+            "docs":false,
         }
     ]
 }
