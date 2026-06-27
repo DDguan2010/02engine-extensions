@@ -1,6 +1,4 @@
-// newline-panel.js - TurboWarp Extension v2
-// 功能：编辑变量 + 列表（列表元素独立框、自动高度、桌面拖拽 + 移动端长按拖动）
-// 新增：面板可拖动、可最小化（移动端适配：底部抽屉式最小化条、拖动标题栏）
+
 (function (Scratch) {
   'use strict';
 
@@ -8,9 +6,242 @@
     throw new Error('此扩展需要以 Unsandboxed 方式运行。');
   }
 
+  // ===== HTML 显示=====
+  //感谢不想上学的代码
+  class NP_HTML {
+    constructor(html) {
+      this.html = String(html).trim();
+    }
+
+    toString() {
+      const div = document.createElement('div');
+      div.innerHTML = this.html;
+      return div.innerText;
+    }
+
+    getHTML() {
+      const div = document.createElement('div');
+      div.innerHTML = this.html;
+      return div;
+    }
+  }
+
+  class NP_Wrapper extends String {
+    constructor(value) {
+      super(value);
+      this.value = value;
+    }
+
+    static unwrap(value) {
+      return value instanceof NP_Wrapper ? value.value : value;
+    }
+
+    toString() {
+      return String(this.value);
+    }
+  }
+
+  function npHijack(fn) {
+    const _orig = Function.prototype.apply;
+    Function.prototype.apply = function (thisArg) {
+      return thisArg;
+    };
+    const result = fn();
+    Function.prototype.apply = _orig;
+    return result;
+  }
+
+  function npGetBlockly(vm) {
+    let Blockly;
+
+    if (vm?._events?.EXTENSION_ADDED instanceof Array) {
+      for (const value of vm._events.EXTENSION_ADDED) {
+        const v = npHijack(value);
+        if (v?.ScratchBlocks) {
+          Blockly = v.ScratchBlocks;
+          break;
+        }
+      }
+    } else if (vm?._events?.EXTENSION_ADDED) {
+      Blockly = npHijack(vm._events.EXTENSION_ADDED)?.ScratchBlocks;
+    }
+
+    return Blockly;
+  }
+
+  function npShowHTMLReport(Blockly, id, value, textAlign) {
+    const workspace = Blockly.getMainWorkspace();
+    const block = workspace.getBlockById(id);
+    if (!block) return;
+
+    Blockly.DropDownDiv.hideWithoutAnimation();
+    Blockly.DropDownDiv.clearContent();
+
+    const contentDiv = Blockly.DropDownDiv.getContentDiv();
+    const elem = document.createElement('div');
+
+    elem.setAttribute('class', 'valueReportBox');
+    elem.append(...value);
+    elem.style.maxWidth = 'none';
+    elem.style.maxHeight = 'none';
+    elem.style.textAlign = textAlign;
+    elem.style.userSelect = 'none';
+
+    contentDiv.appendChild(elem);
+
+    Blockly.DropDownDiv.setColour(
+      Blockly.Colours.valueReportBackground,
+      Blockly.Colours.valueReportBorder
+    );
+
+    Blockly.DropDownDiv.showPositionedByBlock(workspace, block);
+    return elem;
+  }
+
+  function installNewlinePanelHTMLSupport(runtime) {
+    if (runtime.__newlinePanelHTMLSupportInstalled) return;
+    runtime.__newlinePanelHTMLSupportInstalled = true;
+
+    const vm = Scratch.vm;
+    let Blockly = npGetBlockly(vm);
+
+    if (!Blockly) {
+      vm.once('workspaceUpdate', () => {
+        const newBlockly = npGetBlockly(vm);
+        if (newBlockly && newBlockly !== Blockly) {
+          Blockly = newBlockly;
+        }
+      });
+    }
+
+    const _visualReport = runtime.visualReport;
+    runtime.visualReport = (blockId, value) => {
+      const unwrappedValue = NP_Wrapper.unwrap(value);
+
+      if (unwrappedValue instanceof NP_HTML && Blockly) {
+        return npShowHTMLReport(
+          Blockly,
+          blockId,
+          [unwrappedValue.getHTML()],
+          'center'
+        );
+      }
+
+      return _visualReport.call(runtime, blockId, value);
+    };
+
+    const _requestUpdateMonitor = runtime.requestUpdateMonitor;
+    const monitorMap = new Map();
+
+    if (_requestUpdateMonitor) {
+      const patchMonitorValue = (element, value) => {
+        const unwrappedValue = NP_Wrapper.unwrap(value);
+        const valueElement = element.querySelector('[class*="value"]');
+
+        if (!(valueElement instanceof HTMLElement)) return;
+
+        const internalInstance = Object.values(valueElement).find(
+          v => typeof v === 'object' && v !== null && Reflect.has(v, 'stateNode')
+        );
+
+        if (unwrappedValue instanceof NP_HTML) {
+          const inspector = unwrappedValue.getHTML();
+
+          valueElement.style.textAlign = 'left';
+          valueElement.style.backgroundColor = 'rgb(30, 30, 30)';
+          valueElement.style.color = '#eeeeee';
+
+          while (valueElement.firstChild) {
+            valueElement.removeChild(valueElement.firstChild);
+          }
+
+          valueElement.append(inspector);
+        } else if (internalInstance) {
+          valueElement.style.textAlign = '';
+          valueElement.style.backgroundColor =
+            internalInstance.memoizedProps?.style?.background ?? '';
+          valueElement.style.color =
+            internalInstance.memoizedProps?.style?.color ?? '';
+
+          while (valueElement.firstChild) {
+            valueElement.removeChild(valueElement.firstChild);
+          }
+
+          valueElement.append(String(value));
+        }
+      };
+
+      const getMonitorById = id => {
+        const elements = document.querySelectorAll(
+          '[class*="monitor_monitor-container"]'
+        );
+
+        for (const element of Object.values(elements)) {
+          const internalInstance = Object.values(element).find(
+            v => typeof v === 'object' && v !== null && Reflect.has(v, 'children')
+          );
+
+          if (internalInstance) {
+            const props = internalInstance?.children?.props;
+            if (id === props?.id) return element;
+          }
+        }
+
+        return null;
+      };
+
+      runtime.requestUpdateMonitor = state => {
+        const id = state.get('id');
+
+        if (typeof id === 'string') {
+          const monitorValue = state.get('value');
+          const unwrappedValue = NP_Wrapper.unwrap(monitorValue);
+          const monitorMode = state.get('mode');
+          const monitorVisible = state.get('visible');
+          const cache = monitorMap.get(id);
+
+          if (typeof monitorMode === 'string' && cache) {
+            cache.mode = monitorMode;
+            cache.value = void 0;
+          } else if (monitorValue !== void 0) {
+            if (unwrappedValue instanceof NP_HTML) {
+              if (!cache || cache.value !== monitorValue) {
+                requestAnimationFrame(() => {
+                  const monitor = getMonitorById(id);
+                  if (monitor) patchMonitorValue(monitor, monitorValue);
+                });
+
+                if (!cache) {
+                  monitorMap.set(id, {
+                    value: monitorValue,
+                    mode: 'normal'
+                  });
+                } else {
+                  cache.value = monitorValue;
+                }
+              }
+
+              return true;
+            } else if (monitorMap.has(id)) {
+              const monitor = getMonitorById(id);
+              if (monitor) patchMonitorValue(monitor, monitorValue);
+              monitorMap.delete(id);
+            }
+          } else if (monitorVisible !== void 0) {
+            if (!monitorVisible) monitorMap.delete(id);
+          }
+        }
+
+        return _requestUpdateMonitor.call(runtime, state);
+      };
+    }
+  }
+
   class NewlinePanelExtension {
     constructor() {
       this.runtime = Scratch.vm.runtime;
+      installNewlinePanelHTMLSupport(this.runtime);
+
       this.panelOpen = false;
       this.panelElement = null;
 
@@ -20,10 +251,8 @@
 
       this.listItemsContainer = null;
 
-      // Desktop HTML5 drag sort
       this.draggedElement = null;
 
-      // Mobile touch sort
       this.isTouchDragging = false;
       this.touchDragEl = null;
       this.touchDragPointerOffsetY = 0;
@@ -35,9 +264,7 @@
       this.touchStartClientX = 0;
       this.touchMoved = false;
 
-      // Panel move/minimize
       this.isMinimized = false;
-      this.panelPos = { left: null, top: null }; // px
       this.panelDrag = {
         active: false,
         startX: 0,
@@ -45,7 +272,15 @@
         startLeft: 0,
         startTop: 0
       };
-      this.lastNonMinimized = { left: null, top: null, width: null, height: null };
+      this.lastNonMinimized = {
+        left: null,
+        top: null,
+        width: null,
+        height: null
+      };
+
+      // HTML 写入开关，默认关闭
+      this.writeAsHtml = false;
     }
 
     getInfo() {
@@ -69,7 +304,7 @@
     }
 
     isMobileLike() {
-      return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+      return ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     }
 
     clamp(n, min, max) {
@@ -103,7 +338,6 @@
         -webkit-tap-highlight-color: transparent;
       `;
 
-      // 标题栏（可拖动）
       const header = document.createElement('div');
       header.style.cssText = `
         padding: 10px 12px;
@@ -115,7 +349,7 @@
         gap: 8px;
         cursor: ${mobile ? 'default' : 'move'};
         user-select: none;
-        touch-action: none; /* 允许我们处理触控拖动面板 */
+        touch-action: none;
       `;
 
       const title = document.createElement('div');
@@ -157,7 +391,6 @@
       headerBtns.appendChild(closeBtn);
       header.appendChild(headerBtns);
 
-      // 内容区域
       const content = document.createElement('div');
       content.style.cssText = `
         padding: 12px 14px;
@@ -174,41 +407,21 @@
         padding: 12px;
       `;
 
-      // 模式切换
       const modeTabArea = document.createElement('div');
       modeTabArea.style.cssText = 'margin-bottom: 12px; display:flex; gap:8px; flex-wrap:wrap;';
 
       const varTab = document.createElement('button');
       varTab.textContent = '🔤 变量';
-      varTab.style.cssText = `
-        padding: 8px 12px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.3);
-        background: rgba(255,255,255,0.25);
-        color: #fff;
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 800;
-      `;
+      varTab.style.cssText = this.tabStyle(true);
 
       const listTab = document.createElement('button');
       listTab.textContent = '📑 列表';
-      listTab.style.cssText = `
-        padding: 8px 12px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.3);
-        background: rgba(255,255,255,0.15);
-        color: #fff;
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 800;
-      `;
+      listTab.style.cssText = this.tabStyle(false);
 
       modeTabArea.appendChild(varTab);
       modeTabArea.appendChild(listTab);
       box.appendChild(modeTabArea);
 
-      // 选择区域
       const selectArea = document.createElement('div');
       selectArea.style.cssText = 'margin-bottom: 10px;';
 
@@ -233,19 +446,7 @@
         font-size: 14px;
       `;
 
-      const refreshBtn = document.createElement('button');
-      refreshBtn.textContent = '🔄 刷新';
-      refreshBtn.style.cssText = `
-        padding: 10px 14px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.3);
-        background: rgba(255,255,255,0.15);
-        color: #fff;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 800;
-      `;
-
+      const refreshBtn = this.createButton('🔄 刷新');
       selectRow.appendChild(itemSelect);
       selectRow.appendChild(refreshBtn);
       selectArea.appendChild(selectRow);
@@ -255,7 +456,6 @@
       itemInfo.style.cssText = 'font-size:11px; opacity:0.85; margin-bottom:10px; min-height:16px;';
       box.appendChild(itemInfo);
 
-      // 变量编辑
       const varTextArea = document.createElement('textarea');
       varTextArea.placeholder = '请选择变量后编辑（支持换行）';
       varTextArea.style.cssText = `
@@ -276,7 +476,6 @@
       `;
       box.appendChild(varTextArea);
 
-      // 列表编辑
       const listContainer = document.createElement('div');
       listContainer.style.cssText = `
         display: none;
@@ -304,17 +503,65 @@
       listContainer.appendChild(this.listItemsContainer);
       box.appendChild(listContainer);
 
-      // 按钮区
+      // HTML 危险开关
+      const htmlDangerArea = document.createElement('div');
+      htmlDangerArea.style.cssText = `
+        margin-top: 12px;
+        padding: 10px;
+        border-radius: 10px;
+        background: rgba(0,0,0,0.18);
+        border: 1px solid rgba(255,255,255,0.18);
+      `;
+
+      const htmlDangerBtn = this.createButton('⚠️ 写入为 HTML：关闭', 'rgba(255,255,255,0.15)');
+      htmlDangerBtn.style.width = '100%';
+
+      const htmlDangerText = document.createElement('div');
+      htmlDangerText.textContent = '';
+      htmlDangerText.style.cssText = `
+        display: none;
+        margin-top: 8px;
+        font-size: 12px;
+        line-height: 1.5;
+        color: #ffeaa7;
+        font-weight: 800;
+      `;
+
+      const updateHtmlDangerUI = () => {
+        if (this.writeAsHtml) {
+          htmlDangerBtn.textContent = '⚠️ 写入为 HTML：开启，危险';
+          htmlDangerBtn.style.background = 'rgba(255, 87, 34, 0.55)';
+          htmlDangerText.style.display = 'block';
+          htmlDangerText.textContent = '感谢不想上学提供部分代码';
+        } else {
+          htmlDangerBtn.textContent = '⚠️ 写入为 HTML：关闭';
+          htmlDangerBtn.style.background = 'rgba(255,255,255,0.15)';
+          htmlDangerText.style.display = 'none';
+          htmlDangerText.textContent = '';
+        }
+      };
+
+      htmlDangerBtn.onclick = () => {
+        this.writeAsHtml = !this.writeAsHtml;
+        updateHtmlDangerUI();
+      };
+
+      updateHtmlDangerUI();
+
+      htmlDangerArea.appendChild(htmlDangerBtn);
+      htmlDangerArea.appendChild(htmlDangerText);
+      box.appendChild(htmlDangerArea);
+
       const buttonArea = document.createElement('div');
       buttonArea.style.cssText = 'margin-top: 12px; display:grid; grid-template-columns: 1fr 1fr; gap: 8px;';
 
       const saveBtn = this.createButton('📥 保存', '#e74c3c');
       const clearBtn = this.createButton('🗑️ 清空内容', '#95a5a6');
+
       buttonArea.appendChild(saveBtn);
       buttonArea.appendChild(clearBtn);
       box.appendChild(buttonArea);
 
-      // 状态
       const status = document.createElement('div');
       status.style.cssText = `
         margin-top: 10px;
@@ -332,12 +579,9 @@
       panel.appendChild(content);
       document.body.appendChild(panel);
 
-      // ---- 面板拖动（桌面+移动端）----
       const startPanelDrag = (clientX, clientY) => {
-        // 最小化时也允许拖动（移动端表现为拖动最小化条）
         const rect = panel.getBoundingClientRect();
 
-        // 使用 left/top 绝对值替代 translate 定位
         panel.style.transform = 'none';
         panel.style.left = `${rect.left}px`;
         panel.style.top = `${rect.top}px`;
@@ -370,32 +614,36 @@
         this.panelDrag.active = false;
       };
 
-      // 只允许从标题栏空白处拖动（避免按钮区域）
-      header.addEventListener('mousedown', (e) => {
+      header.addEventListener('mousedown', e => {
         if (e.button !== 0) return;
         if (e.target === minBtn || e.target === closeBtn) return;
+
         startPanelDrag(e.clientX, e.clientY);
-        const onMove = (ev) => movePanelDrag(ev.clientX, ev.clientY);
+
+        const onMove = ev => movePanelDrag(ev.clientX, ev.clientY);
         const onUp = () => {
           window.removeEventListener('mousemove', onMove);
           window.removeEventListener('mouseup', onUp);
           endPanelDrag();
         };
+
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
       });
 
-      header.addEventListener('touchstart', (e) => {
+      header.addEventListener('touchstart', e => {
         if (!e.touches || e.touches.length !== 1) return;
         if (e.target === minBtn || e.target === closeBtn) return;
+
         const t = e.touches[0];
         startPanelDrag(t.clientX, t.clientY);
 
-        const onMove = (ev) => {
+        const onMove = ev => {
           if (!ev.touches || ev.touches.length !== 1) return;
           const tt = ev.touches[0];
           movePanelDrag(tt.clientX, tt.clientY);
         };
+
         const onEnd = () => {
           window.removeEventListener('touchmove', onMove);
           window.removeEventListener('touchend', onEnd);
@@ -408,9 +656,9 @@
         window.addEventListener('touchcancel', onEnd, { passive: true });
       }, { passive: true });
 
-      // ---- 最小化/还原（移动端：底部条；桌面：缩成小窗）----
       const applyMinimizedStyle = () => {
         const rect = panel.getBoundingClientRect();
+
         this.lastNonMinimized = {
           left: rect.left,
           top: rect.top,
@@ -422,7 +670,6 @@
         content.style.display = 'none';
 
         if (mobile) {
-          // 底部抽屉式最小化：固定在底部，宽度撑满
           panel.style.transform = 'none';
           panel.style.left = '8px';
           panel.style.right = '8px';
@@ -432,19 +679,18 @@
           panel.style.maxHeight = 'unset';
           panel.style.borderRadius = '14px';
         } else {
-          // 桌面：缩成小窗，保留可拖动
           panel.style.maxHeight = 'unset';
           panel.style.width = '360px';
           panel.style.height = '56px';
         }
-        minBtn.textContent = '▢'; // 还原图标
+
+        minBtn.textContent = '▢';
       };
 
       const applyRestoredStyle = () => {
         this.isMinimized = false;
         content.style.display = 'block';
 
-        // 恢复位置（如果之前已经切换到 left/top 模式）
         panel.style.right = '';
         panel.style.bottom = '';
         panel.style.height = '';
@@ -452,7 +698,6 @@
         panel.style.width = 'min(780px, calc(100vw - 16px))';
         panel.style.borderRadius = '12px';
 
-        // 如果曾经有记录位置，用 left/top 还原；否则回到居中 transform
         if (this.lastNonMinimized.left != null && this.lastNonMinimized.top != null) {
           panel.style.transform = 'none';
           panel.style.left = `${this.clamp(this.lastNonMinimized.left, 8, window.innerWidth - 120)}px`;
@@ -471,31 +716,27 @@
         else applyMinimizedStyle();
       };
 
-      // 窗口尺寸变化时，保证面板不出界（移动端旋转）
       const onResize = () => {
         if (!this.panelElement) return;
-
-        if (this.isMinimized && mobile) {
-          // 底部条不需要处理
-          return;
-        }
+        if (this.isMinimized && mobile) return;
 
         const rect = panel.getBoundingClientRect();
-        if (panel.style.transform !== 'none') return; // 还在居中模式
+        if (panel.style.transform !== 'none') return;
 
         const w = rect.width;
         const h = rect.height;
         const left = this.clamp(rect.left, 8, window.innerWidth - w - 8);
         const top = this.clamp(rect.top, 8, window.innerHeight - h - 8);
+
         panel.style.left = `${left}px`;
         panel.style.top = `${top}px`;
       };
+
       window.addEventListener('resize', onResize);
 
-      // ---- 业务逻辑 ----
       const loadItems = () => this.loadItemsList(itemSelect, itemInfo, varTextArea);
 
-      const switchMode = (mode) => {
+      const switchMode = mode => {
         this.currentMode = mode;
         this.selectedItemId = null;
 
@@ -510,6 +751,7 @@
           varTextArea.style.display = 'none';
           listContainer.style.display = 'block';
         }
+
         loadItems();
       };
 
@@ -520,6 +762,7 @@
         this.selectedItemId = itemSelect.value;
         this.renderSelected(itemInfo, varTextArea);
       };
+
       refreshBtn.onclick = loadItems;
 
       saveBtn.onclick = () => {
@@ -527,23 +770,37 @@
           this.showStatus(status, '❌ 请先选择一个项目', 'error');
           return;
         }
+
         if (this.currentMode === 'VARIABLE') {
           this.overwriteVariable(this.selectedItemId, varTextArea.value);
-          this.showStatus(status, '✅ 已保存变量内容', 'success');
+          this.showStatus(
+            status,
+            this.writeAsHtml ? '✅ 已保存变量内容为 HTML，危险模式已使用' : '✅ 已保存变量内容',
+            'success'
+          );
         } else {
           this.saveListFromItems();
-          this.showStatus(status, '✅ 已保存列表内容（含新顺序）', 'success');
+          this.showStatus(
+            status,
+            this.writeAsHtml ? '✅ 已保存列表内容为 HTML，危险模式已使用' : '✅ 已保存列表内容（含新顺序）',
+            'success'
+          );
         }
       };
 
       clearBtn.onclick = () => {
-        if (this.currentMode === 'VARIABLE') varTextArea.value = '';
-        else this.listItemsContainer.innerHTML = '';
+        if (this.currentMode === 'VARIABLE') {
+          varTextArea.value = '';
+        } else {
+          this.listItemsContainer.innerHTML = '';
+        }
+
         this.showStatus(status, 'ℹ️ 已清空编辑区（需点击"保存"才能写入）', 'info');
       };
 
       addItemBtn.onclick = () => {
         if (this.currentMode !== 'LIST') return;
+
         const el = this.createListItemElement('');
         this.listItemsContainer.appendChild(el);
         this.updateListIndices();
@@ -553,7 +810,19 @@
       loadItems();
     }
 
-    // ---------- 数据加载 ----------
+    tabStyle(active) {
+      return `
+        padding: 8px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,0.3);
+        background: ${active ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.15)'};
+        color: #fff;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 800;
+      `;
+    }
+
     loadItemsList(itemSelect, itemInfo, varTextArea) {
       const items = this.getItemsByMode(this.currentMode);
       itemSelect.innerHTML = '';
@@ -573,27 +842,35 @@
       if (stageItems.length) {
         const g = document.createElement('optgroup');
         g.label = '舞台';
+
         stageItems.forEach(v => {
           const opt = document.createElement('option');
           opt.value = v.id;
           opt.textContent = v.name;
           g.appendChild(opt);
         });
+
         itemSelect.appendChild(g);
       }
 
       if (spriteItems.length) {
         const groups = {};
-        spriteItems.forEach(v => (groups[v.targetName] ??= []).push(v));
+
+        spriteItems.forEach(v => {
+          (groups[v.targetName] ??= []).push(v);
+        });
+
         for (const [targetName, arr] of Object.entries(groups)) {
           const g = document.createElement('optgroup');
           g.label = `角色: ${targetName}`;
+
           arr.forEach(v => {
             const opt = document.createElement('option');
             opt.value = v.id;
             opt.textContent = v.name;
             g.appendChild(opt);
           });
+
           itemSelect.appendChild(g);
         }
       }
@@ -619,22 +896,59 @@
     getItemsByMode(mode) {
       const items = [];
       const targets = this.runtime.targets || [];
+
       targets.forEach(target => {
         const targetVars = target.variables || {};
-        const targetName = target.getName ? target.getName() : (target.name || '未知角色');
+        const targetName = target.getName ? target.getName() : target.name || '未知角色';
+
         for (const id in targetVars) {
           const v = targetVars[id];
           if (!v) continue;
+
           if (mode === 'VARIABLE' && v.type === '') {
-            items.push({ id, name: v.name, value: v.value, targetName, isStage: target.isStage, type: mode });
+            items.push({
+              id,
+              name: v.name,
+              value: v.value,
+              targetName,
+              isStage: target.isStage,
+              type: mode
+            });
           }
+
           if (mode === 'LIST' && v.type === 'list') {
-            items.push({ id, name: v.name, value: v.value, targetName, isStage: target.isStage, type: mode });
+            items.push({
+              id,
+              name: v.name,
+              value: v.value,
+              targetName,
+              isStage: target.isStage,
+              type: mode
+            });
           }
         }
       });
+
       items.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
       return items;
+    }
+
+    valueToEditableText(value) {
+      const unwrapped = NP_Wrapper.unwrap(value);
+
+      if (unwrapped instanceof NP_HTML) {
+        return unwrapped.html;
+      }
+
+      return String(value ?? '');
+    }
+
+    wrapValueIfHTML(value) {
+      if (this.writeAsHtml) {
+        return new NP_Wrapper(new NP_HTML(String(value)));
+      }
+
+      return value;
     }
 
     loadSelectedVariable(itemInfo, varTextArea) {
@@ -643,12 +957,15 @@
         varTextArea.value = '';
         return;
       }
+
       const item = this.allItems.find(v => v.id === this.selectedItemId);
       if (!item) return;
 
       const targetType = item.isStage ? '舞台' : '角色';
-      itemInfo.textContent = `${targetType}: ${item.targetName} | 长度: ${String(item.value).length}`;
-      varTextArea.value = String(item.value);
+      const editableText = this.valueToEditableText(item.value);
+
+      itemInfo.textContent = `${targetType}: ${item.targetName} | 长度: ${editableText.length}`;
+      varTextArea.value = editableText;
     }
 
     loadSelectedList(itemInfo) {
@@ -657,19 +974,26 @@
         if (this.listItemsContainer) this.listItemsContainer.innerHTML = '';
         return;
       }
+
       const item = this.allItems.find(v => v.id === this.selectedItemId);
       if (!item) return;
 
       const targetType = item.isStage ? '舞台' : '角色';
       const arr = Array.isArray(item.value) ? item.value : [];
+
       itemInfo.textContent = `${targetType}: ${item.targetName} | 元素数: ${arr.length}`;
 
       this.listItemsContainer.innerHTML = '';
-      arr.forEach(val => this.listItemsContainer.appendChild(this.createListItemElement(val)));
+
+      arr.forEach(val => {
+        this.listItemsContainer.appendChild(
+          this.createListItemElement(this.valueToEditableText(val))
+        );
+      });
+
       this.updateListIndices();
     }
 
-    // ---------- 列表元素 + 排序 ----------
     createListItemElement(value) {
       const wrapper = document.createElement('div');
       wrapper.className = 'list-item-wrapper';
@@ -736,6 +1060,7 @@
         textarea.style.height = 'auto';
         textarea.style.height = Math.max(44, textarea.scrollHeight) + 'px';
       };
+
       textarea.addEventListener('input', autoResize);
       setTimeout(autoResize, 0);
 
@@ -757,30 +1082,40 @@
         this.updateListIndices();
       };
 
-      // Desktop HTML5 drag (wrapper draggable; usually desktop only)
       wrapper.draggable = true;
-      wrapper.ondragstart = (e) => {
-        if (e.target === textarea) { e.preventDefault(); return; }
+
+      wrapper.ondragstart = e => {
+        if (e.target === textarea) {
+          e.preventDefault();
+          return;
+        }
+
         this.draggedElement = wrapper;
         wrapper.style.opacity = '0.6';
         e.dataTransfer.effectAllowed = 'move';
       };
+
       wrapper.ondragend = () => {
         wrapper.style.opacity = '';
         this.draggedElement = null;
         this.updateListIndices();
       };
-      wrapper.ondragover = (e) => {
+
+      wrapper.ondragover = e => {
         e.preventDefault();
         if (!this.draggedElement) return;
+
         const after = this.getDragAfterElement(this.listItemsContainer, e.clientY);
-        if (after == null) this.listItemsContainer.appendChild(this.draggedElement);
-        else this.listItemsContainer.insertBefore(this.draggedElement, after);
+
+        if (after == null) {
+          this.listItemsContainer.appendChild(this.draggedElement);
+        } else {
+          this.listItemsContainer.insertBefore(this.draggedElement, after);
+        }
       };
 
-      // Mobile: long-press handle drag
-      handle.addEventListener('touchstart', (e) => this.onTouchHandleStart(e, wrapper), { passive: false });
-      handle.addEventListener('touchmove', (e) => this.onTouchHandleMove(e), { passive: false });
+      handle.addEventListener('touchstart', e => this.onTouchHandleStart(e, wrapper), { passive: false });
+      handle.addEventListener('touchmove', e => this.onTouchHandleMove(e), { passive: false });
       handle.addEventListener('touchend', () => this.onTouchHandleEnd(), { passive: true });
       handle.addEventListener('touchcancel', () => this.onTouchHandleEnd(), { passive: true });
 
@@ -788,19 +1123,23 @@
       wrapper.appendChild(indexLabel);
       wrapper.appendChild(textarea);
       wrapper.appendChild(del);
+
       return wrapper;
     }
 
     onTouchHandleStart(e, wrapper) {
       if (!e.touches || e.touches.length !== 1) return;
+
       e.preventDefault();
 
       const t = e.touches[0];
+
       this.touchMoved = false;
       this.touchStartClientY = t.clientY;
       this.touchStartClientX = t.clientX;
 
       clearTimeout(this.touchLongPressTimer);
+
       this.touchLongPressTimer = setTimeout(() => {
         this.startTouchDrag(wrapper, t.clientY);
       }, this.touchLongPressMs);
@@ -808,16 +1147,21 @@
 
     onTouchHandleMove(e) {
       if (!e.touches || e.touches.length !== 1) return;
+
       const t = e.touches[0];
 
       const dy = Math.abs(t.clientY - this.touchStartClientY);
       const dx = Math.abs(t.clientX - this.touchStartClientX);
-      if (dy > this.touchMoveThreshold || dx > this.touchMoveThreshold) this.touchMoved = true;
+
+      if (dy > this.touchMoveThreshold || dx > this.touchMoveThreshold) {
+        this.touchMoved = true;
+      }
 
       if (!this.isTouchDragging && this.touchMoved) {
         clearTimeout(this.touchLongPressTimer);
         return;
       }
+
       if (!this.isTouchDragging) return;
 
       e.preventDefault();
@@ -825,30 +1169,37 @@
       const y = t.clientY - this.touchDragPointerOffsetY;
       this.touchDragEl.style.top = `${y}px`;
 
-      // auto scroll list container (parent of listItemsContainer)
       const container = this.listItemsContainer.parentElement;
       const rect = container.getBoundingClientRect();
       const edge = 40;
       const speed = 12;
+
       if (t.clientY < rect.top + edge) container.scrollTop -= speed;
       if (t.clientY > rect.bottom - edge) container.scrollTop += speed;
 
       const after = this.getDragAfterElement(this.listItemsContainer, t.clientY);
-      if (after == null) this.listItemsContainer.appendChild(this.touchDragPlaceholder);
-      else this.listItemsContainer.insertBefore(this.touchDragPlaceholder, after);
+
+      if (after == null) {
+        this.listItemsContainer.appendChild(this.touchDragPlaceholder);
+      } else {
+        this.listItemsContainer.insertBefore(this.touchDragPlaceholder, after);
+      }
     }
 
     onTouchHandleEnd() {
       clearTimeout(this.touchLongPressTimer);
+
       if (!this.isTouchDragging) return;
 
       const ph = this.touchDragPlaceholder;
+
       if (ph && ph.parentNode) {
         ph.parentNode.insertBefore(this.touchDragEl, ph);
         ph.remove();
       }
 
       const el = this.touchDragEl;
+
       el.style.position = '';
       el.style.left = '';
       el.style.top = '';
@@ -879,6 +1230,7 @@
         border: 2px dashed rgba(255,255,255,0.35);
         background: rgba(255,255,255,0.08);
       `;
+
       this.touchDragPlaceholder = ph;
 
       wrapper.parentNode.insertBefore(ph, wrapper.nextSibling);
@@ -896,38 +1248,51 @@
       const items = [...container.querySelectorAll('.list-item-wrapper')]
         .filter(el => el !== this.draggedElement && el !== this.touchDragEl);
 
-      let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
+      let closest = {
+        offset: Number.NEGATIVE_INFINITY,
+        element: null
+      };
+
       for (const child of items) {
         const box = child.getBoundingClientRect();
         const offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) closest = { offset, element: child };
+
+        if (offset < 0 && offset > closest.offset) {
+          closest = {
+            offset,
+            element: child
+          };
+        }
       }
+
       return closest.element;
     }
 
     updateListIndices() {
       const wrappers = this.listItemsContainer?.querySelectorAll('.list-item-wrapper') || [];
+
       wrappers.forEach((wrapper, idx) => {
         const label = wrapper.querySelector('.index-label');
         if (label) label.textContent = `${idx + 1}.`;
       });
     }
 
-    // ---------- 保存 ----------
     saveListFromItems() {
       if (!this.selectedItemId) return;
 
       const item = this.allItems.find(v => v.id === this.selectedItemId);
       if (!item) return;
 
-      const target = this.runtime.targets.find(t => t.variables && t.variables[this.selectedItemId]);
+      const target = this.runtime.targets.find(
+        t => t.variables && t.variables[this.selectedItemId]
+      );
       if (!target) return;
 
       const listObj = target.variables[this.selectedItemId];
       if (!listObj) return;
 
       const textareas = this.listItemsContainer.querySelectorAll('textarea');
-      const values = Array.from(textareas).map(ta => ta.value);
+      const values = Array.from(textareas).map(ta => this.wrapValueIfHTML(ta.value));
 
       listObj.value = values;
       item.value = values;
@@ -946,16 +1311,18 @@
       const varObj = target.variables[varId];
       if (!varObj) return;
 
-      varObj.value = newText;
-      item.value = newText;
+      const finalValue = this.wrapValueIfHTML(newText);
+
+      varObj.value = finalValue;
+      item.value = finalValue;
 
       this.runtime.emit('PROJECT_CHANGED');
       this.runtime.requestRedraw();
     }
 
-    // ---------- UI helpers ----------
     createButton(text, bgColor = 'rgba(255,255,255,0.15)') {
       const btn = document.createElement('button');
+
       btn.textContent = text;
       btn.style.cssText = `
         padding: 10px 12px;
@@ -967,11 +1334,13 @@
         font-size: 13px;
         font-weight: 900;
       `;
+
       return btn;
     }
 
     showStatus(element, message, type) {
       if (!element) return;
+
       element.textContent = message;
       element.style.display = 'block';
       element.style.background =
@@ -979,7 +1348,10 @@
         type === 'error' ? 'rgba(244,67,54,0.3)' :
         type === 'info' ? 'rgba(52,152,219,0.3)' :
         'rgba(0,0,0,0.2)';
-      setTimeout(() => (element.style.display = 'none'), 2600);
+
+      setTimeout(() => {
+        if (element) element.style.display = 'none';
+      }, 2600);
     }
 
     closePanel() {
@@ -989,6 +1361,7 @@
         this.panelElement.remove();
         this.panelElement = null;
       }
+
       this.panelOpen = false;
 
       this.selectedItemId = null;
