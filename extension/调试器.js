@@ -1,5 +1,5 @@
-// Name: Shovel Debugger + Code Cleaner Panel
-// By: TheShovel + integrated cleaner
+// Name: Shovel Debugger + Code Cleaner 
+// By: TheShovel + integrated cleaner+yuan
 // License: MIT
 
 (function (Scratch) {

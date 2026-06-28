@@ -1,2102 +1,1508 @@
+/* eslint-disable max-classes-per-file */
+/* eslint-disable camelcase */
+// import interact from 'interactjs';
+// eslint-disable-next-line max-classes-per-file
+// import icon from './assets/icon.svg';
 (function (Scratch) {
-  "use strict";
-
-  const EXT_ID = "astarPathfindingTW";
-
-  const clampInt = (v, def = 0) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? (n | 0) : def;
-  };
-  const toKey = (x, y) => `${x},${y}`;
-  const manhattan = (ax, ay, bx, by) => Math.abs(ax - bx) + Math.abs(ay - by);
-
-  // --- 高效优先队列 (基于 TypedArray 的 SoA 结构优化) ---
-  class FastMinHeap {
-    constructor(capacity = 1024) {
-      this.capacity = capacity;
-      this.size = 0;
-      this.f = new Float64Array(capacity);
-      this.i = new Int32Array(capacity);
-      this.x = new Int16Array(capacity);
-      this.y = new Int16Array(capacity);
-    }
-
-    clear() {
-      this.size = 0;
-    }
-
-    _resize() {
-      const newCap = this.capacity * 2;
-      const nf = new Float64Array(newCap);
-      const ni = new Int32Array(newCap);
-      const nx = new Int16Array(newCap);
-      const ny = new Int16Array(newCap);
-
-      nf.set(this.f);
-      ni.set(this.i);
-      nx.set(this.x);
-      ny.set(this.y);
-
-      this.f = nf;
-      this.i = ni;
-      this.x = nx;
-      this.y = ny;
-      this.capacity = newCap;
-    }
-
-    push(cost, idx, tx, ty) {
-      if (this.size >= this.capacity) {
-        this._resize();
-      }
-
-      let i = this.size;
-      this.size++;
-
-      const fArr = this.f;
-      const iArr = this.i;
-      const xArr = this.x;
-      const yArr = this.y;
-
-      while (i > 0) {
-        const p = (i - 1) >> 1;
-        if (fArr[p] <= cost) break;
-
-        fArr[i] = fArr[p];
-        iArr[i] = iArr[p];
-        xArr[i] = xArr[p];
-        yArr[i] = yArr[p];
-
-        i = p;
-      }
-
-      fArr[i] = cost;
-      iArr[i] = idx;
-      xArr[i] = tx;
-      yArr[i] = ty;
-    }
-
-    pop() {
-      if (this.size === 0) return null;
-
-      const fArr = this.f;
-      const iArr = this.i;
-      const xArr = this.x;
-      const yArr = this.y;
-
-      const ret = { f: fArr[0], i: iArr[0], x: xArr[0], y: yArr[0] };
-
-      this.size--;
-      const lastF = fArr[this.size];
-      const lastI = iArr[this.size];
-      const lastX = xArr[this.size];
-      const lastY = yArr[this.size];
-
-      if (this.size > 0) {
-        let i = 0;
-        const len = this.size;
-
-        while (true) {
-          const l = (i << 1) + 1;
-          const r = l + 1;
-          let m = i;
-
-          if (l < len && fArr[l] < fArr[m]) m = l;
-          if (r < len && fArr[r] < fArr[m]) m = r;
-
-          if (m === i) break;
-
-          fArr[i] = fArr[m];
-          iArr[i] = iArr[m];
-          xArr[i] = xArr[m];
-          yArr[i] = yArr[m];
-
-          i = m;
-        }
-
-        fArr[i] = lastF;
-        iArr[i] = lastI;
-        xArr[i] = lastX;
-        yArr[i] = lastY;
-      }
-
-      return ret;
-    }
-
-    length() {
-      return this.size;
-    }
-  }
-
-  // --- 寻路核心引擎 ---
-  class PathEngine {
-    constructor(grid, W, H) {
-      this.grid = grid;
-      this.W = W;
-      this.H = H;
-      this.size = W * H;
-
-      this.g = new Int32Array(this.size);
-      this.parent = new Int32Array(this.size);
-
-      this.gB = new Int32Array(this.size);
-      this.parentB = new Int32Array(this.size);
-
-      this.visitedStamp = new Int32Array(this.size);
-      this.currStamp = 0;
-
-      this.open = new FastMinHeap();
-      this.openB = new FastMinHeap();
-
-      this.active = false;
-      this.done = false;
-      this.found = false;
-      this.pathRes = "";
-      this.expanded = 0;
-      this.progressText = "0%";
-
-      this.mode = "astar";
-      this.weight = 1.0;
-    }
-
-    _idx(x, y) {
-      return y * this.W + x;
-    }
-
-    _isWalk(x, y) {
-      return x >= 0 && y >= 0 && x < this.W && y < this.H && this.grid[y * this.W + x] === 0;
-    }
-
-    _inBounds(x, y) {
-      return x >= 0 && y >= 0 && x < this.W && y < this.H;
-    }
-
-    _newRun(mode, weight) {
-      this.mode = mode;
-      this.weight = weight;
-
-      this.currStamp++;
-      if (this.currStamp >= 0x3FFFFFFF) {
-        this.currStamp = 1;
-        this.visitedStamp.fill(0);
-      }
-
-      this.open.clear();
-      this.openB.clear();
-      this.active = true;
-      this.done = false;
-      this.found = false;
-      this.pathRes = "";
-      this.expanded = 0;
-    }
-
-    // 修复：支持真正根据 pathAlgo 切换路径算法
-    initSearch(sx, sy, tx, ty, algoStr, pathAlgo) {
-      let mode = "astar";
-      let w = 1.0;
-
-      const pAlgo = String(pathAlgo || "astar").toLowerCase();
-
-      switch (String(algoStr || "balanced")) {
-        case "fast":
-          mode = "astar";
-          w = 1.5;
-          break;
-        case "greedy_fast":
-          mode = "astar";
-          w = 5.0;
-          break;
-        case "bidirectional_fast":
-          mode = "bidir";
-          w = 1.5;
-          break;
-        case "accurate":
-          mode = "astar";
-          w = 1.0;
-          break;
-        default:
-          mode = "astar";
-          w = 1.0;
-          break;
-      }
-
-      // 若路径算法指定为 jps，则优先切换到 jps
-      if (pAlgo === "jps") {
-        mode = "jps";
-        w = 1.0;
-      } else if (pAlgo === "astar") {
-        // 保持上面由 algoStr 决定的 astar / bidir / weighted astar
-      }
-
-      this._newRun(mode, w);
-
-      if (!this._isWalk(sx, sy) || !this._isWalk(tx, ty)) {
-        this.done = true;
-        return;
-      }
-      if (sx === tx && sy === ty) {
-        this.done = true;
-        this.found = true;
-        return;
-      }
-
-      this.sx = sx;
-      this.sy = sy;
-      this.tx = tx;
-      this.ty = ty;
-
-      const sIdx = this._idx(sx, sy);
-
-      const vVal = this.currStamp * 4;
-      this.visitedBase = vVal;
-
-      this.visitedStamp[sIdx] = vVal + 1;
-      this.g[sIdx] = 0;
-      this.parent[sIdx] = -1;
-
-      this.open.push(manhattan(sx, sy, tx, ty) * w, sIdx, sx, sy);
-
-      if (mode === "bidir") {
-        const tIdx = this._idx(tx, ty);
-        this.visitedStamp[tIdx] = vVal + 2;
-        this.gB[tIdx] = 0;
-        this.parentB[tIdx] = -1;
-        this.openB.push(manhattan(tx, ty, sx, sy) * w, tIdx, tx, ty);
-      }
-    }
-
-    runBFSOnlyDist(sx, sy, targetIndicesSet) {
-      this.currStamp++;
-      if (this.currStamp >= 0x3FFFFFFF) {
-        this.currStamp = 1;
-        this.visitedStamp.fill(0);
-      }
-      const vVal = this.currStamp * 4;
-
-      const q = [this._idx(sx, sy)];
-      const dists = new Map();
-      const sIdx = this._idx(sx, sy);
-
-      this.visitedStamp[sIdx] = vVal + 1;
-      this.g[sIdx] = 0;
-
-      if (targetIndicesSet.has(sIdx)) dists.set(sIdx, 0);
-
-      let head = 0;
-      let targetsFound = 0;
-      const targetCount = targetIndicesSet.size;
-      const W = this.W;
-      const H = this.H;
-      const grid = this.grid;
-      const visited = this.visitedStamp;
-      const g = this.g;
-
-      while (head < q.length) {
-        const u = q[head++];
-        const d = g[u];
-
-        const cx = u % W;
-        const cy = (u / W) | 0;
-
-        if (cy > 0) {
-          const v = u - W;
-          if (visited[v] < vVal && grid[v] === 0) {
-            visited[v] = vVal + 1;
-            g[v] = d + 1;
-            q.push(v);
-            if (targetIndicesSet.has(v)) {
-              dists.set(v, d + 1);
-              targetsFound++;
-            }
-          }
-        }
-        if (cy < H - 1) {
-          const v = u + W;
-          if (visited[v] < vVal && grid[v] === 0) {
-            visited[v] = vVal + 1;
-            g[v] = d + 1;
-            q.push(v);
-            if (targetIndicesSet.has(v)) {
-              dists.set(v, d + 1);
-              targetsFound++;
-            }
-          }
-        }
-        if (cx > 0) {
-          const v = u - 1;
-          if (visited[v] < vVal && grid[v] === 0) {
-            visited[v] = vVal + 1;
-            g[v] = d + 1;
-            q.push(v);
-            if (targetIndicesSet.has(v)) {
-              dists.set(v, d + 1);
-              targetsFound++;
-            }
-          }
-        }
-        if (cx < W - 1) {
-          const v = u + 1;
-          if (visited[v] < vVal && grid[v] === 0) {
-            visited[v] = vVal + 1;
-            g[v] = d + 1;
-            q.push(v);
-            if (targetIndicesSet.has(v)) {
-              dists.set(v, d + 1);
-              targetsFound++;
-            }
-          }
-        }
-
-        if (targetsFound === targetCount) break;
-      }
-      return dists;
-    }
-
-    step(iterBudget) {
-      if (this.mode === "bidir") this._stepBiDir(iterBudget);
-      else if (this.mode === "jps") this._stepJPS(iterBudget);
-      else this._stepAStar(iterBudget);
-    }
-
-    _stepAStar(iterBudget) {
-      let iters = iterBudget;
-      const W = this.W,
-        H = this.H;
-      const tx = this.tx,
-        ty = this.ty;
-      const weight = this.weight;
-      const vVal = this.visitedBase;
-      const grid = this.grid;
-      const visited = this.visitedStamp;
-      const g = this.g;
-      const parent = this.parent;
-      const open = this.open;
-
-      const dxs = [0, 0, -1, 1];
-      const dys = [-1, 1, 0, 0];
-
-      while (iters-- > 0) {
-        const node = open.pop();
-        if (!node) {
-          this.done = true;
-          this.found = false;
-          this.progressText = "100%";
-          return;
-        }
-
-        const u = node.i;
-        const ux = node.x;
-        const uy = node.y;
-
-        if (g[u] < node.f - manhattan(ux, uy, tx, ty) * weight - 0.0001) {
-          continue;
-        }
-
-        if (ux === tx && uy === ty) {
-          this.done = true;
-          this.found = true;
-          this.progressText = "100%";
-          this.pathRes = this._reconstruct(u);
-          return;
-        }
-
-        this.expanded++;
-        const baseG = g[u];
-
-        for (let k = 0; k < 4; k++) {
-          const nx = ux + dxs[k];
-          const ny = uy + dys[k];
-
-          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-          const v = ny * W + nx;
-          if (grid[v] !== 0) continue;
-
-          const newG = baseG + 1;
-
-          if (visited[v] < vVal || newG < g[v]) {
-            visited[v] = vVal + 1;
-            g[v] = newG;
-            parent[v] = u;
-            const h = Math.abs(nx - tx) + Math.abs(ny - ty);
-            open.push(newG + h * weight, v, nx, ny);
-          }
-        }
-      }
-      this._updateProgress();
-    }
-
-    _stepBiDir(iterBudget) {
-      let iters = iterBudget;
-      const weight = this.weight;
-      const vVal = this.visitedBase;
-      const W = this.W,
-        H = this.H;
-      const grid = this.grid;
-
-      const dxs = [0, 0, -1, 1];
-      const dys = [-1, 1, 0, 0];
-
-      while (iters-- > 0) {
-        let expandFwd = true;
-
-        if (this.open.length() === 0 && this.openB.length() === 0) {
-          this.done = true;
-          this.found = false;
-          return;
-        }
-
-        if (this.openB.length() > 0) {
-          if (this.open.length() === 0) expandFwd = false;
-          else if (this.open.length() > this.openB.length()) expandFwd = false;
-        }
-
-        let currentOpen, currentG, currentParent, currentFlag, targetFlag;
-        let targetX, targetY;
-
-        if (expandFwd) {
-          currentOpen = this.open;
-          currentG = this.g;
-          currentParent = this.parent;
-          currentFlag = 1;
-          targetFlag = 2;
-          targetX = this.tx;
-          targetY = this.ty;
-        } else {
-          currentOpen = this.openB;
-          currentG = this.gB;
-          currentParent = this.parentB;
-          currentFlag = 2;
-          targetFlag = 1;
-          targetX = this.sx;
-          targetY = this.sy;
-        }
-
-        const node = currentOpen.pop();
-        if (!node) continue;
-        const u = node.i;
-        const ux = node.x;
-        const uy = node.y;
-
-        const status = this.visitedStamp[u];
-        if (status >= vVal && ((status - vVal) & targetFlag)) {
-          this.done = true;
-          this.found = true;
-          this.progressText = "100%";
-          this.pathRes = this._reconstructBiDir(u);
-          return;
-        }
-
-        this.visitedStamp[u] = vVal + ((status >= vVal) ? ((status - vVal) | currentFlag) : currentFlag);
-        this.expanded++;
-
-        const baseG = currentG[u];
-
-        for (let k = 0; k < 4; k++) {
-          const nx = ux + dxs[k];
-          const ny = uy + dys[k];
-
-          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-          const v = ny * W + nx;
-          if (grid[v] !== 0) continue;
-
-          const newG = baseG + 1;
-          const vStatus = this.visitedStamp[v];
-          const visitedByMe = vStatus >= vVal && ((vStatus - vVal) & currentFlag);
-
-          if (!visitedByMe || newG < currentG[v]) {
-            const newFlag = vStatus >= vVal ? ((vStatus - vVal) | currentFlag) : currentFlag;
-            this.visitedStamp[v] = vVal + newFlag;
-
-            currentG[v] = newG;
-            currentParent[v] = u;
-
-            const h = Math.abs(nx - targetX) + Math.abs(ny - targetY);
-
-            currentOpen.push(newG + h * weight, v, nx, ny);
-
-            if (vStatus >= vVal && ((vStatus - vVal) & targetFlag)) {
-              this.done = true;
-              this.found = true;
-              this.progressText = "100%";
-              this.pathRes = this._reconstructBiDir(v);
-              return;
-            }
-          }
-        }
-      }
-      this._updateProgress();
-    }
-
-    _stepJPS(iterBudget) {
-      let iters = iterBudget;
-      const W = this.W;
-      const tx = this.tx,
-        ty = this.ty;
-      const vVal = this.visitedBase;
-      const visited = this.visitedStamp;
-      const g = this.g;
-      const parent = this.parent;
-      const open = this.open;
-
-      while (iters-- > 0) {
-        const node = open.pop();
-        if (!node) {
-          this.done = true;
-          this.found = false;
-          return;
-        }
-        const u = node.i;
-        const ux = node.x;
-        const uy = node.y;
-
-        if (ux === tx && uy === ty) {
-          this.done = true;
-          this.found = true;
-          this.progressText = "100%";
-          this.pathRes = this._reconstruct(u);
-          return;
-        }
-
-        const dirs = [
-          { x: 0, y: -1 },
-          { x: 0, y: 1 },
-          { x: -1, y: 0 },
-          { x: 1, y: 0 }
-        ];
-        this.expanded++;
-
-        for (let i = 0; i < 4; i++) {
-          const dir = dirs[i];
-          const jumpPoint = this._jump(ux, uy, dir.x, dir.y);
-
-          if (jumpPoint) {
-            const jx = jumpPoint.x;
-            const jy = jumpPoint.y;
-            const v = jy * W + jx;
-            const dist = Math.abs(jx - ux) + Math.abs(jy - uy);
-            const newG = g[u] + dist;
-
-            if (visited[v] < vVal || newG < g[v]) {
-              visited[v] = vVal + 1;
-              g[v] = newG;
-              parent[v] = u;
-              const h = Math.abs(jx - tx) + Math.abs(jy - ty);
-              open.push(newG + h, v, jx, jy);
-            }
-          }
-        }
-        this._updateProgress();
-      }
-    }
-
-    _jump(cx, cy, dx, dy) {
-      const tx = this.tx,
-        ty = this.ty;
-      const W = this.W,
-        H = this.H;
-      const grid = this.grid;
-
-      let nx = cx;
-      let ny = cy;
-
-      while (true) {
-        nx += dx;
-        ny += dy;
-
-        if (nx < 0 || ny < 0 || nx >= W || ny >= H) return null;
-        if (grid[ny * W + nx] !== 0) return null;
-
-        if (nx === tx && ny === ty) return { x: nx, y: ny };
-
-        if (dx !== 0) {
-          if (
-            (ny > 0 &&
-              grid[(ny - 1) * W + nx] !== 0 &&
-              nx - dx >= 0 &&
-              nx - dx < W &&
-              grid[(ny - 1) * W + (nx - dx)] === 0) ||
-            (ny < H - 1 &&
-              grid[(ny + 1) * W + nx] !== 0 &&
-              nx - dx >= 0 &&
-              nx - dx < W &&
-              grid[(ny + 1) * W + (nx - dx)] === 0)
-          ) {
-            return { x: nx, y: ny };
-          }
-        } else {
-          if (
-            (nx > 0 &&
-              grid[ny * W + (nx - 1)] !== 0 &&
-              ny - dy >= 0 &&
-              ny - dy < H &&
-              grid[(ny - dy) * W + (nx - 1)] === 0) ||
-            (nx < W - 1 &&
-              grid[ny * W + (nx + 1)] !== 0 &&
-              ny - dy >= 0 &&
-              ny - dy < H &&
-              grid[(ny - dy) * W + (nx + 1)] === 0)
-          ) {
-            return { x: nx, y: ny };
-          }
-        }
-      }
-    }
-
-    _updateProgress() {
-      const ratio = this.expanded / (this.expanded + this.open.length() + this.openB.length() + 1);
-      this.progressText = `${(ratio * 100).toFixed(0)}%`;
-    }
-
-    _reconstruct(endIdx) {
-      let cur = endIdx;
-      const res = [];
-      const W = this.W;
-      const parent = this.parent;
-
-      while (true) {
-        const p = parent[cur];
-        if (p === -1) break;
-
-        const cx = cur % W;
-        const cy = (cur / W) | 0;
-        const px = p % W;
-        const py = (p / W) | 0;
-
-        const dx = Math.sign(cx - px);
-        const dy = Math.sign(cy - py);
-
-        let dist = Math.abs(cx - px) + Math.abs(cy - py);
-        let ix = cx,
-          iy = cy;
-
-        for (let k = 0; k < dist; k++) {
-          if (ix === px && iy === py) break;
-          if (ix !== px) {
-            res.push(dx > 0 ? "d" : "a");
-            ix -= dx;
-          } else {
-            res.push(dy > 0 ? "s" : "w");
-            iy -= dy;
-          }
-        }
-        cur = p;
-      }
-      return res.reverse().join("");
-    }
-
-    _reconstructBiDir(meetIdx) {
-      const path1 = this._reconstruct(meetIdx);
-
-      let cur = meetIdx;
-      const res2 = [];
-      const W = this.W;
-      const parentB = this.parentB;
-
-      while (true) {
-        const p = parentB[cur];
-        if (p === -1) break;
-
-        const cx = cur % W;
-        const cy = (cur / W) | 0;
-        const px = p % W;
-        const py = (p / W) | 0;
-
-        if (px === cx && py === cy - 1) res2.push("w");
-        else if (px === cx && py === cy + 1) res2.push("s");
-        else if (px === cx - 1 && py === cy) res2.push("a");
-        else if (px === cx + 1 && py === cy) res2.push("d");
-
-        cur = p;
-      }
-      return path1 + res2.join("");
-    }
-  }
-
-  // --- 扩展主逻辑 ---
-  class Extension {
+  class AssetsHelper {
     constructor() {
-      this.maps = new Map();
-      this._activeMapName = "";
+      this.decodeImageCache = {};
+      this.imageCache = {};
     }
 
-    _getOrCreateMap(nameRaw) {
-      const name = String(nameRaw ?? "").trim() || "default";
-      let st = this.maps.get(name);
-      if (!st) {
-        st = {
-          name,
-          W: 0,
-          H: 0,
-          grid: null,
-          sx: 0,
-          sy: 0,
-          tx: 0,
-          ty: 0,
-          waypoints: new Map(),
-
-          kThreshold: 12,
-          _sliceMs: 500,
-          algo: "balanced",
-          pathAlgo: "astar",
-
-          _progress: "0%",
-          _cachedKey: "",
-          _cachedRoute: "",
-          _cachedRoutePos: 0,
-
-          _engine: null,
-          _plan: null,
-          _planKey: "",
-
-          twoOptEnabled: true,
-          twoOptMaxPasses: 4,
-          twoOptNeighborhood: 0,
-
-          _zoomScale: 1.0,
-          _panX: 0,
-          _panY: 0,
-          _winX: 0,
-          _winY: 0,
-
-          list: [],
-
-          _debugEl: null,
-          _debugCanvas: null,
-          _debugMode: "view",
-          _debugTool: "wall",
-          _debugPalette: null
-        };
-        this.maps.set(name, st);
-      }
-      return st;
-    }
-
-    _useMap(name) {
-      const st = this._getOrCreateMap(name);
-      this._activeMapName = st.name;
-      return st;
-    }
-
-    _getActiveMap() {
-      return this._getOrCreateMap(this._activeMapName || "default");
-    }
-
-    _getWalkable(st, x, y) {
-      if (!st.grid) return false;
-      const i = y * st.W + x;
-      return st.grid[i] === 0;
-    }
-
-    _invalidateCache(st) {
-      st._cachedKey = "";
-      st._cachedRoute = "";
-      st._cachedRoutePos = 0;
-      st._plan = null;
-      st._progress = "0%";
-      st._planKey = "";
-    }
-
-    _buildKey(st) {
-      const wps = Array.from(st.waypoints.values())
-        .sort((a, b) => (a.y - b.y) || (a.x - b.x))
-        .map((p) => `${p.x},${p.y}`)
-        .join(";");
-      return `${st.W}x${st.H}|S${st.sx},${st.sy}|T${st.tx},${st.ty}|K${st.kThreshold}|P${wps}|SL${st._sliceMs}|ALG${st.algo}|PATH${st.pathAlgo}|2OPT${st.twoOptEnabled ? 1 : 0}`;
-    }
-
-    _ensureEngine(st) {
-      if (!st._engine || st._engine.W !== st.W || st._engine.H !== st.H) {
-        st._engine = new PathEngine(st.grid, st.W, st.H);
-      }
-      if (st._engine.grid !== st.grid) {
-        st._engine.grid = st.grid;
-      }
-      return st._engine;
-    }
-
-    _validateMap(st) {
-      return st.W > 0 && st.H > 0 && st.grid && st.grid.length === st.W * st.H;
-    }
-
-    _twoOptImproveOrder(order, distFn, maxPasses = 4, neighborhood = 0) {
-      if (!order || order.length < 4) return order;
-
-      const n = order.length;
-      const edgeCost = (a, b) => distFn(a, b);
-
-      const trySwap = (i, k) => {
-        const A = order[i - 1],
-          B = order[i],
-          C = order[k],
-          D = order[k + 1];
-        const ab = edgeCost(A, B);
-        const cd = edgeCost(C, D);
-        const ac = edgeCost(A, C);
-        const bd = edgeCost(B, D);
-
-        if (ab === -1 || cd === -1 || ac === -1 || bd === -1) return false;
-
-        if (ac + bd < ab + cd) {
-          for (let l = i, r = k; l < r; l++, r--) {
-            const t = order[l];
-            order[l] = order[r];
-            order[r] = t;
-          }
-          return true;
-        }
-        return false;
-      };
-
-      for (let pass = 0; pass < maxPasses; pass++) {
-        let improved = false;
-        for (let i = 1; i <= n - 3; i++) {
-          const kStart = i + 1;
-          const kEnd = n - 2;
-
-          if (neighborhood > 0) {
-            const kkEnd = Math.min(kEnd, i + neighborhood);
-            for (let k = kStart; k <= kkEnd; k++) {
-              if (trySwap(i, k)) improved = true;
-            }
-          } else {
-            for (let k = kStart; k <= kEnd; k++) {
-              if (trySwap(i, k)) improved = true;
-            }
-          }
-        }
-        if (!improved) break;
-      }
-      return order;
-    }
-
-    _initPlanIfNeeded(st) {
-      if (st._plan) return;
-      if (!this._validateMap(st)) {
-        st._plan = { done: true, ok: false, route: "" };
-        return;
-      }
-
-      const wps = Array.from(st.waypoints.values());
-      const k = wps.length;
-
-      let mode = "greedy";
-      if (st.algo === "accurate") {
-        mode = "exact";
-      } else if (st.algo === "balanced") {
-        mode = k <= st.kThreshold ? "exact" : "greedy";
-      } else {
-        mode = "greedy";
-      }
-
-      const nodes = [{ x: st.sx, y: st.sy }, ...wps, { x: st.tx, y: st.ty }];
-      const nNodes = nodes.length;
-
-      st._plan = {
-        mode,
-        done: false,
-        ok: false,
-        route: "",
-        nodes,
-        nNodes,
-
-        gPhase: "toWP",
-        gCurIdx: 0,
-        gRemaining: wps.map((_, i) => i + 1),
-        gBuiltRoute: [],
-        gSegActive: false,
-
-        eStage: "bfs",
-        eBfsIdx: 0,
-        eDist: new Int32Array(nNodes * nNodes).fill(-1),
-        eDp: null,
-        ePrev: null,
-        eOrder: null,
-        eBuildIdx: 0
-      };
-    }
-
-    _planStep(st, iterBudget) {
-      this._initPlanIfNeeded(st);
-      const ps = st._plan;
-      if (ps.done) return;
-
-      const eng = this._ensureEngine(st);
-      const algoConfig = st.algo;
-      const pathAlgo = st.pathAlgo;
-
-      if (ps.mode === "greedy") {
-        if (!ps.gSegActive) {
-          let targetNodeIdx = -1;
-
-          if (ps.gPhase === "toWP") {
-            if (ps.gRemaining.length === 0) {
-              ps.gPhase = "toTarget";
-              targetNodeIdx = ps.nNodes - 1;
-            } else {
-              const cur = ps.nodes[ps.gCurIdx];
-              let bestDist = Infinity;
-              let bestArrIdx = -1;
-
-              for (let i = 0; i < ps.gRemaining.length; i++) {
-                const nodeIdx = ps.gRemaining[i];
-                const node = ps.nodes[nodeIdx];
-                const d = manhattan(cur.x, cur.y, node.x, node.y);
-                if (d < bestDist) {
-                  bestDist = d;
-                  bestArrIdx = i;
-                }
-              }
-
-              targetNodeIdx = ps.gRemaining[bestArrIdx];
-              ps.gRemaining.splice(bestArrIdx, 1);
-            }
-          } else {
-            ps.done = true;
-            ps.ok = true;
-            ps.route = ps.gBuiltRoute.join("");
-            st._progress = "100%";
-            return;
-          }
-
-          const fromNode = ps.nodes[ps.gCurIdx];
-          const toNode = ps.nodes[targetNodeIdx];
-
-          eng.initSearch(fromNode.x, fromNode.y, toNode.x, toNode.y, algoConfig, pathAlgo);
-          ps.gSegActive = true;
-          ps.gCurTargetIdx = targetNodeIdx;
-        }
-
-        eng.step(iterBudget);
-        st._progress = `搜索 ${eng.progressText}`;
-
-        if (eng.done) {
-          ps.gSegActive = false;
-          if (!eng.found) {
-            ps.done = true;
-            ps.ok = false;
-            ps.route = "";
-            st._progress = "100%";
-            return;
-          }
-          ps.gBuiltRoute.push(eng.pathRes);
-          ps.gCurIdx = ps.gCurTargetIdx;
-        }
-        return;
-      }
-
-      if (ps.mode === "exact") {
-        if (ps.eStage === "bfs") {
-          const i = ps.eBfsIdx;
-          if (i >= ps.nNodes) {
-            ps.eStage = "dp";
-            return;
-          }
-
-          const targets = new Set();
-          for (let j = 0; j < ps.nNodes; j++) {
-            if (i !== j) targets.add(eng._idx(ps.nodes[j].x, ps.nodes[j].y));
-          }
-
-          const startNode = ps.nodes[i];
-          const distMap = eng.runBFSOnlyDist(startNode.x, startNode.y, targets);
-
-          for (let j = 0; j < ps.nNodes; j++) {
-            if (i === j) {
-              ps.eDist[i * ps.nNodes + j] = 0;
-            } else {
-              const tidx = eng._idx(ps.nodes[j].x, ps.nodes[j].y);
-              const d = distMap.get(tidx);
-              ps.eDist[i * ps.nNodes + j] = d !== undefined ? d : -1;
-            }
-          }
-
-          ps.eBfsIdx++;
-          const pct = (ps.eBfsIdx / ps.nNodes) * 40;
-          st._progress = `预处理 ${pct.toFixed(0)}%`;
-          return;
-        }
-
-        if (ps.eStage === "dp") {
-          const k = ps.nNodes - 2;
-
-          if (k === 0) {
-            if (ps.eDist[0 * ps.nNodes + 1] === -1) {
-              ps.done = true;
-              ps.ok = false;
-            } else {
-              ps.eOrder = [0, 1];
-              ps.eStage = "build";
-            }
-            return;
-          }
-
-          const fullMask = (1 << k) - 1;
-          const numStates = 1 << k;
-
-          if (!ps.eDp) {
-            ps.eDp = new Int32Array(numStates * k).fill(1e9);
-            ps.ePrev = new Int32Array(numStates * k).fill(-1);
-
-            for (let i = 0; i < k; i++) {
-              const dist = ps.eDist[0 * ps.nNodes + (i + 1)];
-              if (dist !== -1) {
-                ps.eDp[(1 << i) * k + i] = dist;
-              }
-            }
-            ps.dpMask = 1;
-          }
-
-          const INF = 1e9;
-          let transitions = iterBudget * 10;
-
-          while (transitions-- > 0 && ps.dpMask <= fullMask) {
-            const mask = ps.dpMask;
-
-            for (let last = 0; last < k; last++) {
-              if (!((mask >> last) & 1)) continue;
-
-              const currentCost = ps.eDp[mask * k + last];
-              if (currentCost >= INF) continue;
-
-              for (let next = 0; next < k; next++) {
-                if ((mask >> next) & 1) continue;
-
-                const d = ps.eDist[(last + 1) * ps.nNodes + (next + 1)];
-                if (d === -1) continue;
-
-                const nextMask = mask | (1 << next);
-                const nextCost = currentCost + d;
-                const idx = nextMask * k + next;
-
-                if (nextCost < ps.eDp[idx]) {
-                  ps.eDp[idx] = nextCost;
-                  ps.ePrev[idx] = last;
-                }
-              }
-            }
-            ps.dpMask++;
-          }
-
-          const dpPct = 40 + (ps.dpMask / fullMask) * 20;
-          st._progress = `规划 ${dpPct.toFixed(0)}%`;
-
-          if (ps.dpMask > fullMask) {
-            let bestCost = INF;
-            let bestLast = -1;
-
-            for (let last = 0; last < k; last++) {
-              const c = ps.eDp[fullMask * k + last];
-              if (c >= INF) continue;
-              const dToT = ps.eDist[(last + 1) * ps.nNodes + (k + 1)];
-              if (dToT === -1) continue;
-
-              if (c + dToT < bestCost) {
-                bestCost = c + dToT;
-                bestLast = last;
-              }
-            }
-
-            if (bestLast === -1) {
-              ps.done = true;
-              ps.ok = false;
-              return;
-            }
-
-            const order = [];
-            let curr = bestLast;
-            let mask = fullMask;
-            while (curr !== -1) {
-              order.push(curr + 1);
-              const prev = ps.ePrev[mask * k + curr];
-              mask = mask ^ (1 << curr);
-              curr = prev;
-            }
-            order.reverse();
-            ps.eOrder = [0, ...order, k + 1];
-
-            if (st.twoOptEnabled && ps.eDist) {
-              const nNodes = ps.nNodes;
-              const distFn = (a, b) => {
-                return ps.eDist[a * nNodes + b];
-              };
-              ps.eOrder = this._twoOptImproveOrder(
-                ps.eOrder,
-                distFn,
-                Math.max(0, clampInt(st.twoOptMaxPasses, 4)),
-                Math.max(0, clampInt(st.twoOptNeighborhood, 0))
-              );
-            }
-
-            ps.eDp = null;
-            ps.ePrev = null;
-            ps.eDist = null;
-
-            ps.eStage = "build";
-            ps.gBuiltRoute = [];
-          }
-          return;
-        }
-
-        if (ps.eStage === "build") {
-          if (!ps.gSegActive) {
-            if (ps.eBuildIdx >= ps.eOrder.length - 1) {
-              ps.done = true;
-              ps.ok = true;
-              ps.route = ps.gBuiltRoute.join("");
-              st._progress = "100%";
-              return;
-            }
-
-            const uIdx = ps.eOrder[ps.eBuildIdx];
-            const vIdx = ps.eOrder[ps.eBuildIdx + 1];
-            const u = ps.nodes[uIdx];
-            const v = ps.nodes[vIdx];
-
-            eng.initSearch(u.x, u.y, v.x, v.y, algoConfig, pathAlgo);
-            ps.gSegActive = true;
-          }
-
-          eng.step(iterBudget);
-          const segPct = 60 + (ps.eBuildIdx / (ps.eOrder.length - 1)) * 40;
-          st._progress = `构建 ${segPct.toFixed(0)}%`;
-
-          if (eng.done) {
-            if (!eng.found) {
-              ps.done = true;
-              ps.ok = false;
-              return;
-            }
-            ps.gBuiltRoute.push(eng.pathRes);
-            ps.gSegActive = false;
-            ps.eBuildIdx++;
-          }
-          return;
-        }
+    clearCache() {
+      // console.log('clearCache');
+      this.decodeImageCache = null;
+      this.decodeImageCache = {};
+      if (Object.values(this.imageCache).length > 99) {
+        this.imageCache = null;
+        this.imageCache = {};
       }
     }
 
-    setMap(args) {
-      const st = this._useMap(args.name);
-      st.H = clampInt(args.L, 0);
-      st.W = clampInt(args.W, 0);
-
-      const rawC = String(args.C ?? "");
-      const len = st.H * st.W;
-      if (st.grid && st.grid.length === len) {
-      } else {
-        st.grid = new Uint8Array(len);
+    decodeImage(asset) {
+      // this.triggerDecodeCacheRelease();
+      if (this.decodeImageCache[asset.assetId]) {
+        return Promise.resolve(true);
       }
-
-      for (let i = 0; i < len; i++) {
-        st.grid[i] = i < rawC.length && rawC.charCodeAt(i) === 48 ? 0 : 1;
-      }
-
-      st.waypoints.clear();
-      st.list = [];
-      st._zoomScale = 1.0;
-      st._panX = 0;
-      st._panY = 0;
-      this._invalidateCache(st);
-      if (st._debugEl) this._updateDebugView(st);
-    }
-
-    setStart(args) {
-      const st = this._useMap(args.name);
-      st.sx = clampInt(args.X, 0);
-      st.sy = clampInt(args.Y, 0);
-      this._invalidateCache(st);
-      if (st._debugEl) this._updateDebugView(st);
-    }
-
-    setTarget(args) {
-      const st = this._useMap(args.name);
-      st.tx = clampInt(args.X, 0);
-      st.ty = clampInt(args.Y, 0);
-      this._invalidateCache(st);
-      if (st._debugEl) this._updateDebugView(st);
-    }
-
-    addWaypoint(args) {
-      const st = this._useMap(args.name);
-      const x = clampInt(args.X, 0);
-      const y = clampInt(args.Y, 0);
-      const key = toKey(x, y);
-
-      if (!st.waypoints.has(key) && st.waypoints.size >= 5) return;
-
-      st.waypoints.set(key, { x, y });
-      this._invalidateCache(st);
-      if (st._debugEl) this._updateDebugView(st);
-    }
-
-    delWaypoint(args) {
-      const st = this._useMap(args.name);
-      const x = clampInt(args.X, 0);
-      const y = clampInt(args.Y, 0);
-      st.waypoints.delete(toKey(x, y));
-      this._invalidateCache(st);
-      if (st._debugEl) this._updateDebugView(st);
-    }
-
-    setK(args) {
-      const st = this._getActiveMap();
-      st.kThreshold = Math.max(0, clampInt(args.K, 12));
-      this._invalidateCache(st);
-      if (st._debugEl) this._updateDebugView(st);
-    }
-
-    setSliceMs(args) {
-      const st = this._getActiveMap();
-      st._sliceMs = Math.max(1, clampInt(args.MS, 500));
-      this._invalidateCache(st);
-      if (st._debugEl) this._updateDebugView(st);
-    }
-
-    setAlgo(args) {
-      const st = this._useMap(args.name);
-      st.algo = String(args.ALG || "balanced");
-      this._invalidateCache(st);
-      if (st._debugEl) this._updateDebugView(st);
-    }
-
-    setPathAlgo(args) {
-      const st = this._useMap(args.name);
-      st.pathAlgo = String(args.PATH_ALG || "astar");
-      this._invalidateCache(st);
-      if (st._debugEl) this._updateDebugView(st);
-    }
-
-    calcPath() {
-      const st = this._getActiveMap();
-      const key = this._buildKey(st);
-
-      if (st._cachedKey === key && st._cachedRoute) {
-        st._progress = "100%";
-        return st._cachedRoute;
-      }
-
-      st._plan = null;
-      this._initPlanIfNeeded(st);
-
-      const start = Date.now();
-      const maxMs = 2500;
-
-      while (!st._plan.done) {
-        if (Date.now() - start > maxMs) break;
-        this._planStep(st, 5000);
-      }
-
-      if (!st._plan.done) return "-1";
-      if (!st._plan.ok) return "-1";
-
-      st._cachedKey = key;
-      st._cachedRoute = st._plan.route;
-      st._cachedRoutePos = 0;
-      return st._cachedRoute;
-    }
-
-    calcOneStep() {
-      const st = this._getActiveMap();
-      const key = this._buildKey(st);
-
-      if (st._cachedKey === key && st._cachedRoute) {
-        if (st._cachedRoutePos >= st._cachedRoute.length) return "-1";
-        return st._cachedRoute.charAt(st._cachedRoutePos++);
-      }
-
-      if (!st._plan || st._planKey !== key) {
-        st._planKey = key;
-        st._plan = null;
-        this._initPlanIfNeeded(st);
-      }
-
-      if (st._plan.done) {
-        if (st._plan.ok) {
-          st._cachedKey = key;
-          st._cachedRoute = st._plan.route;
-          st._cachedRoutePos = 0;
-          return st._cachedRoute.length > 0 ? st._cachedRoute.charAt(st._cachedRoutePos++) : "-1";
-        } else {
-          return "-1";
-        }
-      }
-
-      const deadline = Date.now() + st._sliceMs;
-      while (Date.now() < deadline && !st._plan.done) {
-        this._planStep(st, 2000);
-      }
-
-      if (!st._plan.done) return "none";
-      if (!st._plan.ok) return "-1";
-
-      st._cachedKey = key;
-      st._cachedRoute = st._plan.route;
-      st._cachedRoutePos = 0;
-      return st._cachedRoute.length > 0 ? st._cachedRoute.charAt(st._cachedRoutePos++) : "-1";
-    }
-
-    mapModel() {
-      const st = this._getActiveMap();
-      if (!this._validateMap(st)) return "-1";
-
-      const a = new Array(st.W * st.H);
-      for (let i = 0; i < a.length; i++) {
-        a[i] = st.grid[i] === 0 ? "0" : "1";
-      }
-
-      const put = (x, y, ch) => {
-        if (x < 0 || y < 0 || x >= st.W || y >= st.H) return;
-        a[y * st.W + x] = ch;
-      };
-      for (const p of st.waypoints.values()) put(p.x, p.y, "5");
-      put(st.sx, st.sy, "3");
-      put(st.tx, st.ty, "4");
-
-      let out = "";
-      for (let y = 0; y < st.H; y++) {
-        out += a.slice(y * st.W, (y + 1) * st.W).join("");
-        if (y !== st.H - 1) out += "\n";
-      }
-      return out;
-    }
-
-    progress() {
-      const st = this._getActiveMap();
-      return String(st._progress ?? "0%");
-    }
-
-    findMap(args) {
-      const st = this._useMap(args.name);
-      this.calcPath();
-      st._progress = "100%";
-    }
-
-    findMapFillList(args) {
-      const st = this._useMap(args.name);
-      const route = this.calcPath();
-      st.list = [];
-      if (route === "-1") {
-        st.list.push("-1");
-      } else {
-        for (let i = 0; i < route.length; i++) st.list.push(route.charAt(i));
-        if (st.list.length === 0) st.list.push("-1");
-      }
-    }
-
-    listCount() {
-      const st = this._getActiveMap();
-      return st.list.length;
-    }
-
-    listItem(args) {
-      const st = this._getActiveMap();
-      const i = clampInt(args.I, 1) - 1;
-      if (i < 0 || i >= st.list.length) return "";
-      return String(st.list[i]);
-    }
-
-    _updateDebugView(st) {
-      if (!st._debugEl) return;
-
-      st._debugTitle.textContent = `地图: ${st.name} [${st._debugMode === "edit" ? "编辑" : "查看"}]`;
-      st._debugInfo.textContent = `缩放: ${(st._zoomScale * 100).toFixed(0)}% | 规划: ${st.algo} | 路径: ${st.pathAlgo}`;
-
-      if (st._debugPalette) {
-        st._debugPalette.style.display = st._debugMode === "edit" ? "flex" : "none";
-      }
-
-      const canvas = st._debugCanvas;
-      canvas.style.cursor = st._debugMode === "view" || st._debugTool === "move" ? "grab" : "crosshair";
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      if (!this._validateMap(st)) {
-        ctx.fillStyle = "#fff";
-        ctx.fillText("无效地图", 10, 20);
-        return;
-      }
-
-      const pad = 10;
-      const gw = canvas.width - pad * 2;
-      const gh = canvas.height - pad * 2;
-
-      const baseCell = Math.min(gw / st.W, gh / st.H);
-      const cell = Math.max(2, Math.floor(baseCell * st._zoomScale));
-
-      const totalW = cell * st.W;
-      const totalH = cell * st.H;
-      const ox = pad + Math.floor((gw - totalW) / 2) + st._panX;
-      const oy = pad + Math.floor((gh - totalH) / 2) + st._panY;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(pad, pad, gw, gh);
-      ctx.clip();
-
-      const startX = Math.max(0, Math.floor(-ox / cell));
-      const endX = Math.min(st.W, Math.ceil((canvas.width - ox) / cell));
-      const startY = Math.max(0, Math.floor(-oy / cell));
-      const endY = Math.min(st.H, Math.ceil((canvas.height - oy) / cell));
-
-      for (let y = startY; y < endY; y++) {
-        for (let x = startX; x < endX; x++) {
-          const dx = ox + x * cell;
-          const dy = oy + y * cell;
-
-          ctx.fillStyle = this._getWalkable(st, x, y) ? "#1c7c3a" : "#7c1c1c";
-          ctx.fillRect(dx, dy, cell - (cell > 4 ? 1 : 0), cell - (cell > 4 ? 1 : 0));
-        }
-      }
-
-      ctx.fillStyle = "#ff9f1a";
-      for (const p of st.waypoints.values()) {
-        const cx = ox + p.x * cell + cell / 2;
-        const cy = oy + p.y * cell + cell / 2;
-        if (cx < -cell || cy < -cell || cx > canvas.width + cell || cy > canvas.height + cell) continue;
-        ctx.beginPath();
-        ctx.arc(cx, cy, cell * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.fillStyle = "#2dd4ff";
-      if (ox + st.sx * cell < canvas.width && oy + st.sy * cell < canvas.height) {
-        ctx.fillRect(ox + st.sx * cell + cell * 0.2, oy + st.sy * cell + cell * 0.2, cell * 0.6, cell * 0.6);
-      }
-      ctx.fillStyle = "#a78bfa";
-      if (ox + st.tx * cell < canvas.width && oy + st.ty * cell < canvas.height) {
-        ctx.fillRect(ox + st.tx * cell + cell * 0.2, oy + st.ty * cell + cell * 0.2, cell * 0.6, cell * 0.6);
-      }
-
-      let route = st._cachedRoute;
-      if (!route && st._plan && st._plan.done && st._plan.ok) route = st._plan.route;
-
-      if (route && route !== "-1") {
-        ctx.strokeStyle = "#1e90ff";
-        ctx.lineWidth = Math.max(1, cell * 0.2);
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        let cx = st.sx,
-          cy = st.sy;
-        ctx.moveTo(ox + cx * cell + cell / 2, oy + cy * cell + cell / 2);
-        for (let i = 0; i < route.length; i++) {
-          const c = route.charAt(i);
-          if (c === "w") cy--;
-          else if (c === "s") cy++;
-          else if (c === "a") cx--;
-          else if (c === "d") cx++;
-          ctx.lineTo(ox + cx * cell + cell / 2, oy + cy * cell + cell / 2);
-        }
-        ctx.stroke();
-      }
-
-      ctx.restore();
-
-      st._debugGeo = { cell, ox, oy };
-
-      if (st._toolBtns) {
-        for (const id in st._toolBtns) {
-          const btn = st._toolBtns[id];
-          if (st._debugTool === id) {
-            btn.style.border = "2px solid #fff";
-            btn.style.opacity = "1";
-          } else {
-            btn.style.border = "1px solid #555";
-            btn.style.opacity = "0.7";
-          }
-        }
-      }
-    }
-
-    drawMap(args) {
-      const st = this._useMap(args.name);
-      const mode = args.MODE;
-      st._debugMode = mode;
-
-      if (!st._debugTool) st._debugTool = "wall";
-
-      const root = document.body || document.documentElement;
-      if (!root) return;
-
-      if (!st._debugEl) {
-        const wrap = document.createElement("div");
-        Object.assign(wrap.style, {
-          position: "fixed",
-          right: "12px",
-          bottom: "12px",
-          width: "380px",
-          height: "500px",
-          background: "rgba(20,20,20,0.96)",
-          color: "#fff",
-          border: "1px solid rgba(255,255,255,0.15)",
-          borderRadius: "10px",
-          zIndex: "999999",
-          boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
-          fontFamily: "monospace",
-          userSelect: "none",
-          display: "flex",
-          flexDirection: "column",
-          touchAction: "none"
-        });
-
-        const header = document.createElement("div");
-        Object.assign(header.style, {
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "8px 10px",
-          borderBottom: "1px solid rgba(255,255,255,0.12)",
-          cursor: "move"
-        });
-
-        const title = document.createElement("div");
-        title.style.fontSize = "12px";
-
-        const close = document.createElement("button");
-        close.textContent = "x";
-        Object.assign(close.style, {
-          cursor: "pointer",
-          border: "0",
-          background: "rgba(255,255,255,0.12)",
-          color: "#fff",
-          borderRadius: "6px",
-          width: "28px",
-          height: "24px"
-        });
-        close.onclick = () => {
-          wrap.style.display = "none";
-        };
-
-        header.appendChild(title);
-        header.appendChild(close);
-
-        const toolbar = document.createElement("div");
-        Object.assign(toolbar.style, {
-          padding: "6px",
-          display: "flex",
-          gap: "6px",
-          borderBottom: "1px solid rgba(255,255,255,0.08)"
-        });
-
-        const createBtn = (lbl, fn) => {
-          const b = document.createElement("button");
-          b.innerText = lbl;
-          Object.assign(b.style, {
-            flex: "1",
-            fontSize: "11px",
-            padding: "4px",
-            background: "#333",
-            color: "#eee",
-            border: "1px solid #555",
-            borderRadius: "4px",
-            cursor: "pointer"
-          });
-          b.onclick = fn;
-          return b;
-        };
-
-        toolbar.appendChild(
-          createBtn("运行", () => {
-            this._invalidateCache(st);
-            this.calcPath();
-            this._updateDebugView(st);
-          })
-        );
-
-        toolbar.appendChild(
-          createBtn("+", () => {
-            st._zoomScale = Math.min(10, st._zoomScale + 0.25);
-            this._updateDebugView(st);
-          })
-        );
-
-        toolbar.appendChild(
-          createBtn("-", () => {
-            st._zoomScale = Math.max(0.2, st._zoomScale - 0.25);
-            this._updateDebugView(st);
-          })
-        );
-
-        toolbar.appendChild(
-          createBtn("重置视图", () => {
-            st._zoomScale = 1.0;
-            st._panX = 0;
-            st._panY = 0;
-            this._updateDebugView(st);
-          })
-        );
-
-        toolbar.appendChild(
-          createBtn("清除路径", () => {
-            this._invalidateCache(st);
-            this._updateDebugView(st);
-          })
-        );
-
-        const palette = document.createElement("div");
-        st._debugPalette = palette;
-        Object.assign(palette.style, {
-          padding: "6px",
-          display: "none",
-          gap: "4px",
-          justifyContent: "space-between",
-          background: "rgba(0,0,0,0.2)",
-          borderBottom: "1px solid rgba(255,255,255,0.08)"
-        });
-
-        st._toolBtns = {};
-        const tools = [
-          { id: "move", label: "移动", color: "#607d8b" },
-          { id: "empty", label: "空地", color: "#1c7c3a" },
-          { id: "wall", label: "障碍", color: "#7c1c1c" },
-          { id: "start", label: "起点", color: "#2dd4ff" },
-          { id: "target", label: "终点", color: "#a78bfa" },
-          { id: "waypoint", label: "必经", color: "#ff9f1a" }
-        ];
-
-        tools.forEach((t) => {
-          const b = document.createElement("button");
-          b.innerText = t.label;
-          Object.assign(b.style, {
-            flex: "1",
-            fontSize: "10px",
-            padding: "3px 0",
-            background: t.color,
-            color: "#fff",
-            border: "1px solid #555",
-            borderRadius: "3px",
-            cursor: "pointer"
-          });
-          b.onclick = () => {
-            st._debugTool = t.id;
-            canvas.style.cursor = t.id === "move" ? "grab" : "crosshair";
-            this._updateDebugView(st);
+      if (asset.assetType.runtimeFormat === 'svg') {
+        const svgString = asset.decodeText();
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            img.onload = null;
+            this.decodeImageCache[asset.assetId] = { bmp: img };
+            return resolve(true);
           };
-          st._toolBtns[t.id] = b;
-          palette.appendChild(b);
+          img.src = `data:image/svg+xml;utf8,${encodeURIComponent(svgString)}`;
         });
-
-        const info = document.createElement("div");
-        Object.assign(info.style, { padding: "6px 10px", fontSize: "11px", opacity: "0.9" });
-
-        const canvas = document.createElement("canvas");
-        canvas.width = 360;
-        canvas.height = 340;
-        Object.assign(canvas.style, {
-          display: "block",
-          margin: "0 auto 10px auto",
-          background: "#111",
-          borderRadius: "8px",
-          border: "1px solid rgba(255,255,255,0.10)",
-          cursor: "crosshair",
-          touchAction: "none"
-        });
-
-        let wDrag = false;
-        let wLx = 0,
-          wLy = 0;
-        const startWinDrag = (cx, cy) => {
-          wDrag = true;
-          wLx = cx;
-          wLy = cy;
-        };
-        const doWinDrag = (cx, cy) => {
-          if (!wDrag) return;
-          st._winX = (st._winX || 0) + (cx - wLx);
-          st._winY = (st._winY || 0) + (cy - wLy);
-          wrap.style.transform = `translate(${st._winX}px, ${st._winY}px)`;
-          wLx = cx;
-          wLy = cy;
-        };
-
-        header.addEventListener("mousedown", (e) => startWinDrag(e.clientX, e.clientY));
-        header.addEventListener(
-          "touchstart",
-          (e) => {
-            startWinDrag(e.touches[0].clientX, e.touches[0].clientY);
-            e.preventDefault();
-          },
-          { passive: false }
-        );
-
-        const getCanvasPos = (clientX, clientY) => {
-          const rect = canvas.getBoundingClientRect();
-          return { x: clientX - rect.left, y: clientY - rect.top };
-        };
-
-        const paintCell = (cx, cy) => {
-          if (st._debugMode !== "edit") return;
-          if (!st._debugGeo) return;
-
-          const { cell, ox, oy } = st._debugGeo;
-          const gx = Math.floor((cx - ox) / cell);
-          const gy = Math.floor((cy - oy) / cell);
-
-          if (gx >= 0 && gx < st.W && gy >= 0 && gy < st.H) {
-            const idx = gy * st.W + gx;
-            const tool = st._debugTool;
-
-            const setVal = (v) => {
-              st.grid[idx] = v;
-            };
-
-            if (tool === "empty") {
-              setVal(0);
-              st.waypoints.delete(toKey(gx, gy));
-            } else if (tool === "wall") {
-              setVal(1);
-              st.waypoints.delete(toKey(gx, gy));
-            } else if (tool === "start") {
-              st.sx = gx;
-              st.sy = gy;
-              setVal(0);
-              st.waypoints.delete(toKey(gx, gy));
-            } else if (tool === "target") {
-              st.tx = gx;
-              st.ty = gy;
-              setVal(0);
-              st.waypoints.delete(toKey(gx, gy));
-            } else if (tool === "waypoint") {
-              const k = toKey(gx, gy);
-              if (st.waypoints.has(k) || st.waypoints.size < 5) {
-                setVal(0);
-                st.waypoints.set(k, { x: gx, y: gy });
-              }
-            }
-
-            this._invalidateCache(st);
-            this._updateDebugView(st);
-          }
-        };
-
-        canvas.addEventListener(
-          "wheel",
-          (e) => {
-            e.preventDefault();
-            const delta = -Math.sign(e.deltaY) * 0.1;
-            const oldScale = st._zoomScale;
-            let newScale = oldScale + delta;
-            newScale = Math.max(0.2, Math.min(10, newScale));
-            st._zoomScale = newScale;
-            this._updateDebugView(st);
-          },
-          { passive: false }
-        );
-
-        let isDragging = false;
-        let lastX = 0,
-          lastY = 0;
-        let startDist = 0;
-        let startScale = 1;
-
-        canvas.addEventListener("mousedown", (e) => {
-          isDragging = true;
-          lastX = e.clientX;
-          lastY = e.clientY;
-
-          if (st._debugTool === "move") {
-            canvas.style.cursor = "grabbing";
-            return;
-          }
-
-          if (st._debugMode === "edit") {
-            const p = getCanvasPos(e.clientX, e.clientY);
-            paintCell(p.x, p.y);
-          }
-        });
-
-        window.addEventListener("mousemove", (e) => {
-          if (wDrag) {
-            doWinDrag(e.clientX, e.clientY);
-            return;
-          }
-
-          if (!isDragging) return;
-          if (!st._debugEl || st._debugEl.style.display === "none") return;
-
-          if (st._debugMode === "view" || st._debugTool === "move") {
-            st._panX += e.clientX - lastX;
-            st._panY += e.clientY - lastY;
-            lastX = e.clientX;
-            lastY = e.clientY;
-            this._updateDebugView(st);
-          } else {
-            const rect = canvas.getBoundingClientRect();
-            if (
-              e.clientX >= rect.left &&
-              e.clientX <= rect.right &&
-              e.clientY >= rect.top &&
-              e.clientY <= rect.bottom
-            ) {
-              const p = getCanvasPos(e.clientX, e.clientY);
-              paintCell(p.x, p.y);
-            }
-            lastX = e.clientX;
-            lastY = e.clientY;
-          }
-        });
-
-        window.addEventListener("mouseup", () => {
-          isDragging = false;
-          wDrag = false;
-          if (st._debugTool === "move") canvas.style.cursor = "grab";
-        });
-
-        canvas.addEventListener(
-          "touchstart",
-          (e) => {
-            if (e.touches.length === 2) {
-              startDist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-              );
-              startScale = st._zoomScale;
-              e.preventDefault();
-            } else if (e.touches.length === 1) {
-              isDragging = true;
-              lastX = e.touches[0].clientX;
-              lastY = e.touches[0].clientY;
-
-              if (st._debugTool === "move") return;
-
-              if (st._debugMode === "edit") {
-                const p = getCanvasPos(lastX, lastY);
-                paintCell(p.x, p.y);
-              }
-            }
-          },
-          { passive: false }
-        );
-
-        canvas.addEventListener(
-          "touchmove",
-          (e) => {
-            if (wDrag) {
-              doWinDrag(e.touches[0].clientX, e.touches[0].clientY);
-              return;
-            }
-
-            if (e.touches.length === 2) {
-              const dist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-              );
-              if (startDist > 0) {
-                const ratio = dist / startDist;
-                let newScale = startScale * ratio;
-                newScale = Math.max(0.2, Math.min(10, newScale));
-                st._zoomScale = newScale;
-                this._updateDebugView(st);
-              }
-              e.preventDefault();
-            } else if (e.touches.length === 1 && isDragging) {
-              const cx = e.touches[0].clientX;
-              const cy = e.touches[0].clientY;
-
-              if (st._debugMode === "view" || st._debugTool === "move") {
-                st._panX += cx - lastX;
-                st._panY += cy - lastY;
-                this._updateDebugView(st);
-              } else {
-                const p = getCanvasPos(cx, cy);
-                paintCell(p.x, p.y);
-              }
-              lastX = cx;
-              lastY = cy;
-              e.preventDefault();
-            }
-          },
-          { passive: false }
-        );
-
-        window.addEventListener("touchend", () => {
-          wDrag = false;
-          startDist = 0;
-          if (startDist === 0) isDragging = false;
-        });
-
-        wrap.appendChild(header);
-        wrap.appendChild(toolbar);
-        wrap.appendChild(palette);
-        wrap.appendChild(info);
-        wrap.appendChild(canvas);
-        root.appendChild(wrap);
-
-        st._debugEl = wrap;
-        st._debugCanvas = canvas;
-        st._debugTitle = title;
-        st._debugInfo = info;
       }
+      return createImageBitmap(new Blob([asset.data], { type: asset.assetType.contentType })).then((bmp) => {
+        this.decodeImageCache[asset.assetId] = { bmp };
+        return true;
+      });
+    }
+  }
+  const assetsHelper = new AssetsHelper();
 
-      st._debugEl.style.display = "block";
-      if (st._winX || st._winY) {
-        st._debugEl.style.transform = `translate(${st._winX || 0}px, ${st._winY || 0}px)`;
+  const trace = console.log;
+  const warn = console.warn;
+
+  const localizationWithNamespace = (localization, namespace) => {
+    const rt = {};
+    Object.entries(localization).forEach(([key, value]) => {
+      rt[`${namespace}.${key}`] = value;
+    });
+    return rt;
+  };
+  const { translate } = Scratch;
+
+  class GandiExtension {
+    getHats() {
+      return {
+        ...this.hats,
+      };
+    }
+
+    constructor(runtime, config = { NS: 'Gandi', cn: {}, en: {} }) {
+      this.runtime = runtime;
+      this.hats = {};
+      this.NS = config.NS;
+      /**
+       * Preprocess formatMessage func with namespace
+       */
+      translate.setup({
+        'zh-cn': localizationWithNamespace(config.cn, config.NS),
+        en: localizationWithNamespace(config.en, config.NS),
+      });
+
+      /**
+       * Get the format message function for the current locale.
+       * @param {Object} obj , key for id, value for default
+       * @returns formatted message
+       */
+      this.fm = (obj) => {
+        if (typeof obj === 'string') {
+          return translate({ id: `${config.NS}.${obj}`, default: obj });
+        }
+        const [key, value] = Object.entries(obj)[0];
+        const objWithNS = { id: `${config.NS}.${key}`, default: value };
+        return translate(objWithNS);
+      };
+    }
+
+    // ========================================================================== //
+    //   Utils
+
+    __hideBlocks(blocks) {
+      blocks.forEach((block) => {
+        block.hideFromPalette = true;
+      });
+    }
+
+    __processEvent(event) {
+      this[event] = () => true; // by default return true to keep event running
+      this.hats[`${this.NS}_${event}`] = {};
+    }
+
+    __dispatchCCWEvent(event, fields, parameters, util) {
+      util.startHatsWithParams(`${this.NS}_${event}`, {
+        parameters,
+        fields,
+      });
+    }
+
+    /**
+     * Get a sprite list
+     * @returns Array of sprites in this project
+     */
+    __spriteList() {
+      const sprites = [];
+      this.runtime.targets.forEach((item) => {
+        if (item.isOriginal && !item.isStage) {
+          sprites.push({
+            text: item.sprite.name,
+            value: item.sprite.name,
+          });
+        }
+      });
+      if (sprites.length === 0) {
+        sprites.push({
+          text: '-',
+          value: '',
+        });
       }
-      this._updateDebugView(st);
+      return sprites;
+    }
+
+    /**
+     * return a list of list in this project
+     * @returns Array of list in this project
+     */
+    __listList() {
+      const list = [];
+      let temp = this.runtime._stageTarget.variables;
+      Object.keys(temp).forEach((obj) => {
+        if (temp[obj].type === 'list') {
+          // console.log(temp[obj].type)
+          list.push({
+            text: `${temp[obj].name}`,
+            value: temp[obj].id,
+          });
+        }
+      });
+      try {
+        temp = this.runtime._editingTarget.variables;
+      } catch (e) {
+        temp = 'e';
+      }
+      if (temp !== 'e' && this.runtime._editingTarget !== this.runtime._stageTarget) {
+        Object.keys(temp).forEach((obj) => {
+          if (temp[obj].type === 'list') {
+            list.push({
+              text: `[PRIVATE]${temp[obj].name}`,
+              value: temp[obj].id,
+            });
+          }
+        });
+      }
+      if (list.length === 0) {
+        list.push({
+          text: `-`,
+          value: 'empty',
+        });
+      }
+      return list;
+    }
+
+    /**
+     * Get a variable list
+     * @returns Array of variables in this project
+     */
+    __variableList() {
+      const list = [];
+      let temp = this.runtime._stageTarget.variables;
+      Object.keys(temp).forEach((obj) => {
+        // console.log(temp[obj].type);
+        if (temp[obj].type === '') {
+          list.push({
+            text: `${temp[obj].name}`,
+            value: temp[obj].id,
+          });
+        }
+      });
+      try {
+        temp = this.runtime._editingTarget.variables;
+      } catch (e) {
+        temp = 'e';
+      }
+      if (temp !== 'e' && this.runtime._editingTarget !== this.runtime._stageTarget) {
+        Object.keys(temp).forEach((obj) => {
+          if (temp[obj].type === '') {
+            list.push({
+              text: `[PRIVATE]${temp[obj].name}`,
+              value: temp[obj].id,
+            });
+          }
+        });
+      }
+      if (list.length === 0) {
+        list.push({
+          text: `-`,
+          value: 'empty',
+        });
+      }
+      return list;
+    }
+
+    /**
+     * Find a list in Scratch by id or name
+     * @param {String} listName the name or id of the list
+     * @returns null or the list
+     */
+    __findList(listName = 'empty', target) {
+      if (listName === 'empty') {
+        return null;
+      }
+      return this.__findVariable(listName, true, target);
+    }
+
+    /**
+     * Find a variable in Scratch by id or name
+     * @param {String} varName the name or id of the variable
+     * @returns null or the variable
+     */
+    __findVariable(varName, list = false, target) {
+      // debugger;
+      let rt = null;
+      if (target) {
+        // find the variable in the target first
+        rt = target.lookupVariableById(varName);
+        if (!rt) {
+          rt = target.lookupVariableByNameAndType(varName, list);
+        }
+        if (rt) {
+          return rt;
+        }
+      }
+      // find the variable in the stage
+      const stage = this.runtime.targets[0];
+      rt = stage.lookupVariableById(varName);
+      if (!rt) {
+        rt = stage.lookupVariableByNameAndType(varName, list);
+      }
+      if (rt) {
+        return rt;
+      }
+      // Not found, try the rest of the targets
+      this.runtime.targets.every((target) => {
+        rt = target.lookupVariableById(varName);
+        if (!rt) {
+          rt = target.lookupVariableByNameAndType(varName, list);
+        }
+        if (rt) {
+          return false; // stop every loop
+        }
+        return true; // continue every loop
+      });
+      return rt;
+    }
+
+    /**
+     * Fill an array to a list in Scratch
+     * @param {Array} array An array will be append or overwrite list
+     * @param {String} listName the list name
+     * @param {Object} options ['overwrite'] true/false, default true
+     * @returns success or not
+     */
+    __fillArrayToList(array, listName = 'empty', options = { overwrite: true }, target) {
+      const list = this.__findList(listName, target);
+      if (!list) {
+        return false;
+      }
+      const safeArray = array.map((item) => JSON.stringify(item));
+      if (options.overwrite) {
+        list.value = safeArray;
+      } else {
+        list.value = [list.value, ...safeArray];
+      }
+      return true;
+    }
+
+    /**
+     * Find target by sprite name or Id
+     * @param {string} nameOrId name for sprite, or id for any target
+     * @returns target or null if not found
+     */
+    __getTargetByNameOrId(nameOrId) {
+      // get sprite target by name
+      let target = this.runtime.getSpriteTargetByName(nameOrId);
+      if (!target) {
+        // if sprite not found, assume it as an Id for sprite or clone
+        target = this.runtime.getTargetById(nameOrId);
+        if (!target) return null;
+      }
+      return target;
+    }
+
+    __getSpriteTargetByNameOrId(spriteNameOrId) {
+      let spriteTarget = this.runtime.getTargetById(spriteNameOrId);
+      if (!spriteTarget) {
+        // try find it by name
+        spriteTarget = this.runtime.getSpriteTargetByName(spriteNameOrId);
+      }
+      return spriteTarget;
+    }
+
+    __getSpriteByNameOrId(spriteNameOrId) {
+      const spriteTarget = this.__getSpriteTargetByNameOrId(spriteNameOrId);
+      if (spriteTarget) {
+        return spriteTarget.sprite;
+      }
+      return null;
+    }
+  }
+
+
+  // WorkerQueue.js
+  const WorkerQueue = function (url, count) {
+    this.url = url;
+    this.count = count || navigator.hardwareConcurrency || 4;
+    this.queue = [];
+    this.callbacks = {};
+    this.pool = [];
+    this.idx = 0;
+  };
+
+  // submit 提交任务
+  // usage example:
+  //   let wq = new WorkerQueue("./test.worker.js", 4);
+  //   wq.submit(msg).then(function(data) {
+  //     console.log("recv msg", data);
+  //   });
+  //
+  // ⚠️ Worker 的 onmessage 实现接受的 msg 第一个参数是 id，并且需要原样返回
+  // onmessage = async function (e) {
+  //   let [id, data] = e.data;
+  //   self.postMessage([id, data + 1]);
+  // }
+  WorkerQueue.prototype.submit = function (msg, event_cb = undefined) {
+    return new Promise((resolve, reject) => {
+      this.queue.push([msg, resolve, reject, event_cb]);
+      this._nextJob();
+    });
+  };
+
+  WorkerQueue.prototype.clear = function () {
+    this.pool.map((w) => w[0].terminate());
+    this.pool = [];
+  };
+
+  WorkerQueue.prototype._nextJob = function () {
+    let i;
+    for (i = 0; i < this.pool.length; i++) {
+      if (!this.pool[i][1]) {
+        break;
+      }
+    }
+    if (i < this.pool.length) {
+      this._startJob(i);
+    } else if (this.pool.length < this.count) {
+      const w = this._newWorker();
+      this.pool.push([w, false]);
+      this._startJob(this.pool.length - 1);
+    }
+  };
+
+  WorkerQueue.prototype._newWorker = function () {
+    const w = new Worker(this.url);
+    w.onmessage = (e) => {
+      const [id, data] = e.data;
+      const [resolve, event_cb] = this.callbacks[id];
+      if (e.data.length > 2 && event_cb) {
+        event_cb(e.data[2]);
+      } else {
+        resolve(data);
+        delete this.callbacks[id];
+      }
+    };
+    const wp = (message, event_cb) => {
+      return new Promise((resolve, reject) => {
+        const id = this.idx++;
+        this.callbacks[id] = [resolve, event_cb];
+        w.onerror = function (e) {
+          reject(`ERROR: Line ${e.lineno} in ${e.url}: ${e.message}`);
+        };
+        w.postMessage([id, message]);
+      });
+    };
+    wp.terminate = function () {
+      w.terminate();
+    };
+    return wp;
+  };
+
+  WorkerQueue.prototype._startJob = function (i) {
+    const w = this.pool[i];
+    w[1] = true;
+    if (this.queue.length === 0) {
+      w[1] = false;
+      return;
+    }
+    const [msg, resolve, reject, event_cb] = this.queue.shift();
+    const self = this;
+    w[0](msg, event_cb)
+      .then(resolve, reject)
+      .then(() => {
+        self._startJob(i);
+      });
+  };
+
+  // css
+  (() => {
+    const s = document.createElement('style');
+    s.textContent = `#containerDebugForAStar{
+    position: fixed;
+    left: 350px;
+    bottom: 100px;
+    z-index: 100;
+    touch-action: none;
+    user-select: none;
+    width: 326px;
+    height: 208px;
+    transition: background 0.5s ease-in-out, border 0.5s ease-in-out;
+    border: 3px rgba(255,255,255,0) solid;
+    border-radius: 3px;
+  }
+  #canvasDebugForAStar{
+    background-color: #cecece;
+    transform: scale(0.5) translate(-320px, -180px);
+    opacity: 0.6;
+    cursor: move;
+    transition: all 0.5s ease-in-out;
+
+  }
+  #containerDebugForAStar:hover #canvasDebugForAStar{
+    opacity: 1;
+  }
+
+  #containerDebugForAStar:hover{
+    background-color: aquamarine;
+    border: 3px aquamarine solid;
+  }
+  #containerDebugForAStar::before{
+    content: "A* Odyssey Debug Window @ Gandi IDE";
+    height: 16px;
+    font-size: 12px;
+    line-height: 16px;
+    color: rgba(0,0,0,0);
+    transition: all 0.5s ease-in-out;
+  }
+  #containerDebugForAStar:hover::before{
+    color: rgba(0,0,0,.6);
+  }`;
+    document.head.appendChild(s);
+  })();
+  // ============= 内联 jps_wasm.worker 代码 =============
+  const jpsWorker = "let wasm_bindgen;\r\n(function() {\r\n  const __exports = {};\r\n  let wasm;\r\n\r\n  let cachedUint8Memory0 = new Uint8Array();\r\n\r\n  function getUint8Memory0() {\r\n    if (cachedUint8Memory0.byteLength === 0) {\r\n      cachedUint8Memory0 = new Uint8Array(wasm.memory.buffer);\r\n    }\r\n    return cachedUint8Memory0;\r\n  }\r\n\r\n  let WASM_VECTOR_LEN = 0;\r\n\r\n  function passArray8ToWasm0(arg, malloc) {\r\n    const ptr = malloc(arg.length * 1);\r\n    getUint8Memory0().set(arg, ptr \/ 1);\r\n    WASM_VECTOR_LEN = arg.length;\r\n    return ptr;\r\n  }\r\n\r\n  let cachedInt32Memory0 = new Int32Array();\r\n\r\n  function getInt32Memory0() {\r\n    if (cachedInt32Memory0.byteLength === 0) {\r\n      cachedInt32Memory0 = new Int32Array(wasm.memory.buffer);\r\n    }\r\n    return cachedInt32Memory0;\r\n  }\r\n\r\n  function getArrayI32FromWasm0(ptr, len) {\r\n    return getInt32Memory0().subarray(ptr \/ 4, ptr \/ 4 + len);\r\n  }\r\n\r\n  \/**\r\n   * @param {Uint8Array} map\r\n   * @param {number} map_x\r\n   * @param {number} map_y\r\n   * @param {number} begin_x\r\n   * @param {number} begin_y\r\n   * @param {number} end_x\r\n   * @param {number} end_y\r\n   * @returns {Int32Array}\r\n   *\/\r\n  __exports.a_star_jps = function(map, map_x, map_y, begin_x, begin_y, end_x, end_y) {\r\n    try {\r\n      const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);\r\n      var ptr0 = passArray8ToWasm0(map, wasm.__wbindgen_malloc);\r\n      var len0 = WASM_VECTOR_LEN;\r\n      wasm.a_star_jps(retptr, ptr0, len0, map_x, map_y, begin_x, begin_y, end_x, end_y);\r\n      var r0 = getInt32Memory0()[retptr \/ 4 + 0];\r\n      var r1 = getInt32Memory0()[retptr \/ 4 + 1];\r\n      var v1 = getArrayI32FromWasm0(r0, r1).slice();\r\n      wasm.__wbindgen_free(r0, r1 * 4);\r\n      return v1;\r\n    } finally {\r\n      wasm.__wbindgen_add_to_stack_pointer(16);\r\n      map.set(getUint8Memory0().subarray(ptr0 \/ 1, ptr0 \/ 1 + len0));\r\n      wasm.__wbindgen_free(ptr0, len0 * 1);\r\n    }\r\n  };\r\n\r\n  async function load(module, imports) {\r\n    if (typeof Response === \"function\" && module instanceof Response) {\r\n      if (typeof WebAssembly.instantiateStreaming === \"function\") {\r\n        try {\r\n          return await WebAssembly.instantiateStreaming(module, imports);\r\n\r\n        } catch (e) {\r\n          if (module.headers.get(\"Content-Type\") != \"application\/wasm\") {\r\n            console.warn(\"`WebAssembly.instantiateStreaming` failed because your server does not serve wasm with `application\/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\\n\", e);\r\n\r\n          } else {\r\n            throw e;\r\n          }\r\n        }\r\n      }\r\n\r\n      const bytes = await module.arrayBuffer();\r\n      return await WebAssembly.instantiate(bytes, imports);\r\n\r\n    } else {\r\n      const instance = await WebAssembly.instantiate(module, imports);\r\n\r\n      if (instance instanceof WebAssembly.Instance) {\r\n        return { instance, module };\r\n\r\n      } else {\r\n        return instance;\r\n      }\r\n    }\r\n  }\r\n\r\n  function getImports() {\r\n    const imports = {};\r\n    imports.wbg = {};\r\n\r\n    return imports;\r\n  }\r\n\r\n  function initMemory(imports, maybe_memory) {\r\n\r\n  }\r\n\r\n  function finalizeInit(instance, module) {\r\n    wasm = instance.exports;\r\n    init.__wbindgen_wasm_module = module;\r\n    cachedInt32Memory0 = new Int32Array();\r\n    cachedUint8Memory0 = new Uint8Array();\r\n\r\n\r\n    return wasm;\r\n  }\r\n\r\n  function initSync(module) {\r\n    const imports = getImports();\r\n\r\n    initMemory(imports);\r\n\r\n    if (!(module instanceof WebAssembly.Module)) {\r\n      module = new WebAssembly.Module(module);\r\n    }\r\n\r\n    const instance = new WebAssembly.Instance(module, imports);\r\n\r\n    return finalizeInit(instance, module);\r\n  }\r\n\r\n  async function init(input) {\r\n    if (typeof input === \"undefined\") {\r\n      let src;\r\n      if (typeof document === \"undefined\") {\r\n        src = location.href;\r\n      } else {\r\n        src = document.currentScript.src;\r\n      }\r\n      input = src.replace(\/\\.js$\/, \"_bg.wasm\");\r\n    }\r\n    const imports = getImports();\r\n\r\n    if (typeof input === \"string\" || (typeof Request === \"function\" && input instanceof Request) || (typeof URL === \"function\" && input instanceof URL)) {\r\n      input = fetch(input);\r\n    }\r\n\r\n    initMemory(imports);\r\n\r\n    const { instance, module } = await load(await input, imports);\r\n\r\n    return finalizeInit(instance, module);\r\n  }\r\n\r\n  wasm_bindgen = Object.assign(init, { initSync }, __exports);\r\n\r\n})();\r\n\r\nonmessage = async (e) => {\r\n  \/\/ let sst = performance.now();\r\n  let [uuid, data] = e.data;\r\n  const {\r\n    points, grid, targetId, weight, wasmUrl\r\n  } = data;\r\n  const [sx, sy, ex, ey] = points;\r\n  \/\/ points \u6570\u636e\u7ed3\u679c\u4e3a\uff1a [sx,sy,ex,ey]\uff0c\u5206\u522b\u662f startX, startY, endX, endY\r\n  \/\/ grid \u7684\u6570\u636e\u4e3a\u4e8c\u7ef4\u6570\u7ec4 [y][x]\uff0c\u5750\u6807\u4f7f\u7528\u7684\u662f\u5de6\u4e0a\u89d2\u4e3a 0,0\r\n  \/\/ targetId \u4e0d\u7528\u7ba1\uff0c\u4f20\u5165\u8fdb\u6765\u662f\u4ec0\u4e48\uff0c\u4f20\u51fa\u53bb\u662f\u4ec0\u4e48\u5c31\u884c\u4e86\r\n  \/\/ weight \u4e5f\u4e0d\u7528\u7ba1\uff0c\u4f46\u662f 0 \u4ee3\u8868\u7684\u662f\u4f7f\u7528\u9ad8\u7cbe\u5ea6\u7b97\u6cd5\uff0c 60 \u4ee3\u8868\u7684\u662f\u4f7f\u7528\u5feb\u901f\u7b97\u6cd5\r\n\r\n  await wasm_bindgen(wasmUrl);\r\n\r\n  \/\/ \u9700\u8981\u8fd4\u56de\u7684\u6570\u636e\r\n  let path = [];\r\n  \/\/ \u5bfb\u5230\u7684\u8def [[x,y],[x,y]....]\r\n  let smoothPath = [];\r\n  \/\/ \u5e73\u6ed1\u5904\u7406\u540e\u7684\u8def [[x,y],[x,y]...]\r\n  \/\/ \u82e5\u6ca1\u6709\u8def\u5f84\u5bfb\u5230 \u4fdd\u6301\u9ed8\u8ba4\u503c\u4e3a []\r\n\r\n  \/\/ let map = [];\r\n  \/\/ grid.forEach(v => {\r\n  \/\/   map = map.concat(v);\r\n  \/\/ });\r\n  let map = [].concat(...grid);\r\n\r\n  \/\/ let st = performance.now();\r\n  let retn = wasm_bindgen.a_star_jps(new Uint8Array(map), grid[0].length, grid.length, sx, sy, ex, ey);\r\n  \/\/ console.log(`wasm calc cost: ${performance.now() - st}ms`);\r\n\r\n  let sp = retn[0];\r\n  let path_ = retn.slice(1, sp * 2 + 1);\r\n  let smoothPath_ = retn.slice(sp * 2 + 1);\r\n  for (let i = 0; i < path_.length; i += 2) {\r\n    path.push([path_[i], path_[i + 1]]);\r\n  }\r\n  for (let i = 0; i < smoothPath_.length; i += 2) {\r\n    smoothPath.push([smoothPath_[i], smoothPath_[i + 1]]);\r\n  }\r\n\r\n  postMessage([\r\n    uuid,\r\n    { path, smoothPath, targetId }\r\n  ]);\r\n  \/\/ console.trace(`wasm worker cost: ${performance.now() - sst}ms`);\r\n};";
+  
+  // ============= 内联 astar.worker 代码 =============
+  const astarWorker = "\/* eslint-disable  *\/\r\n\r\n    function Q_rsqrt(number)\r\n    {\r\n      \/\/ return Math.sqrt(number);\r\n        var i;\r\n        var x2, y;\r\n        const threehalfs = 1.5;\r\n\r\n        x2 = number * 0.5;\r\n        y = number;\r\n        \/\/evil floating bit level hacking\r\n        var buf = new ArrayBuffer(4);\r\n        (new Float32Array(buf))[0] = number;\r\n        i =  (new Uint32Array(buf))[0];\r\n        i = (0x5f3759df - (i >> 1)); \/\/ Ref Q\r\n        (new Uint32Array(buf))[0] = i;\r\n        y = (new Float32Array(buf))[0];\r\n        y  = y * ( threehalfs - ( x2 * y * y ) );   \/\/ 1st iteration\r\n    \/\/  y  = y * ( threehalfs - ( x2 * y * y ) );   \/\/ 2nd iteration, this can be removed\r\n\r\n        return y;\r\n    }\r\n    function Q_sqrt(number){\r\n      return Q_rsqrt(number) * number;\r\n    }\r\n\r\n    var Heap, defaultCmp, floor, heapify, heappop, heappush, heappushpop, heapreplace, insort, min, nlargest, nsmallest, updateItem, _siftdown, _siftup;\r\n\r\n    floor = Math.floor, min = Math.min;\r\n    \/*\r\n    Default comparison function to be used\r\n     *\/\r\n\r\n    defaultCmp = function (x, y) {\r\n      if (x < y) {\r\n        return -1;\r\n      }\r\n\r\n      if (x > y) {\r\n        return 1;\r\n      }\r\n\r\n      return 0;\r\n    };\r\n    \/*\r\n    Insert item x in list a, and keep it sorted assuming a is sorted.\r\n\r\n    If x is already in a, insert it to the right of the rightmost x.\r\n\r\n    Optional args lo (default 0) and hi (default a.length) bound the slice\r\n    of a to be searched.\r\n     *\/\r\n\r\n\r\n    insort = function (a, x, lo, hi, cmp) {\r\n      var mid;\r\n\r\n      if (lo == null) {\r\n        lo = 0;\r\n      }\r\n\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      if (lo < 0) {\r\n        throw new Error('lo must be non-negative');\r\n      }\r\n\r\n      if (hi == null) {\r\n        hi = a.length;\r\n      }\r\n\r\n      while (lo < hi) {\r\n        mid = floor((lo + hi) \/ 2);\r\n\r\n        if (cmp(x, a[mid]) < 0) {\r\n          hi = mid;\r\n        } else {\r\n          lo = mid + 1;\r\n        }\r\n      }\r\n\r\n      return [].splice.apply(a, [lo, lo - lo].concat(x)), x;\r\n    };\r\n    \/*\r\n    Push item onto heap, maintaining the heap invariant.\r\n     *\/\r\n\r\n\r\n    heappush = function (array, item, cmp) {\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      array.push(item);\r\n      return _siftdown(array, 0, array.length - 1, cmp);\r\n    };\r\n    \/*\r\n    Pop the smallest item off the heap, maintaining the heap invariant.\r\n     *\/\r\n\r\n\r\n    heappop = function (array, cmp) {\r\n      var lastelt, returnitem;\r\n\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      lastelt = array.pop();\r\n\r\n      if (array.length) {\r\n        returnitem = array[0];\r\n        array[0] = lastelt;\r\n\r\n        _siftup(array, 0, cmp);\r\n      } else {\r\n        returnitem = lastelt;\r\n      }\r\n\r\n      return returnitem;\r\n    };\r\n    \/*\r\n    Pop and return the current smallest value, and add the new item.\r\n\r\n    This is more efficient than heappop() followed by heappush(), and can be\r\n    more appropriate when using a fixed size heap. Note that the value\r\n    returned may be larger than item! That constrains reasonable use of\r\n    this routine unless written as part of a conditional replacement:\r\n        if item > array[0]\r\n          item = heapreplace(array, item)\r\n     *\/\r\n\r\n\r\n    heapreplace = function (array, item, cmp) {\r\n      var returnitem;\r\n\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      returnitem = array[0];\r\n      array[0] = item;\r\n\r\n      _siftup(array, 0, cmp);\r\n\r\n      return returnitem;\r\n    };\r\n    \/*\r\n    Fast version of a heappush followed by a heappop.\r\n     *\/\r\n\r\n\r\n    heappushpop = function (array, item, cmp) {\r\n      var _ref;\r\n\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      if (array.length && cmp(array[0], item) < 0) {\r\n        _ref = [array[0], item], item = _ref[0], array[0] = _ref[1];\r\n\r\n        _siftup(array, 0, cmp);\r\n      }\r\n\r\n      return item;\r\n    };\r\n    \/*\r\n    Transform list into a heap, in-place, in O(array.length) time.\r\n     *\/\r\n\r\n\r\n    heapify = function (array, cmp) {\r\n      var i, _i, _j, _len, _ref, _ref1, _results, _results1;\r\n\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      _ref1 = function () {\r\n        _results1 = [];\r\n\r\n        for (var _j = 0, _ref = floor(array.length \/ 2); 0 <= _ref ? _j < _ref : _j > _ref; 0 <= _ref ? _j++ : _j--) {\r\n          _results1.push(_j);\r\n        }\r\n\r\n        return _results1;\r\n      }.apply(this).reverse();\r\n\r\n      _results = [];\r\n\r\n      for (_i = 0, _len = _ref1.length; _i < _len; _i++) {\r\n        i = _ref1[_i];\r\n\r\n        _results.push(_siftup(array, i, cmp));\r\n      }\r\n\r\n      return _results;\r\n    };\r\n    \/*\r\n    Update the position of the given item in the heap.\r\n    This function should be called every time the item is being modified.\r\n     *\/\r\n\r\n\r\n    updateItem = function (array, item, cmp) {\r\n      var pos;\r\n\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      pos = array.indexOf(item);\r\n\r\n      if (pos === -1) {\r\n        return;\r\n      }\r\n\r\n      _siftdown(array, 0, pos, cmp);\r\n\r\n      return _siftup(array, pos, cmp);\r\n    };\r\n    \/*\r\n    Find the n largest elements in a dataset.\r\n     *\/\r\n\r\n\r\n    nlargest = function (array, n, cmp) {\r\n      var elem, result, _i, _len, _ref;\r\n\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      result = array.slice(0, n);\r\n\r\n      if (!result.length) {\r\n        return result;\r\n      }\r\n\r\n      heapify(result, cmp);\r\n      _ref = array.slice(n);\r\n\r\n      for (_i = 0, _len = _ref.length; _i < _len; _i++) {\r\n        elem = _ref[_i];\r\n        heappushpop(result, elem, cmp);\r\n      }\r\n\r\n      return result.sort(cmp).reverse();\r\n    };\r\n    \/*\r\n    Find the n smallest elements in a dataset.\r\n     *\/\r\n\r\n\r\n    nsmallest = function (array, n, cmp) {\r\n      var elem, i, los, result, _i, _j, _len, _ref, _ref1, _results;\r\n\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      if (n * 10 <= array.length) {\r\n        result = array.slice(0, n).sort(cmp);\r\n\r\n        if (!result.length) {\r\n          return result;\r\n        }\r\n\r\n        los = result[result.length - 1];\r\n        _ref = array.slice(n);\r\n\r\n        for (_i = 0, _len = _ref.length; _i < _len; _i++) {\r\n          elem = _ref[_i];\r\n\r\n          if (cmp(elem, los) < 0) {\r\n            insort(result, elem, 0, null, cmp);\r\n            result.pop();\r\n            los = result[result.length - 1];\r\n          }\r\n        }\r\n\r\n        return result;\r\n      }\r\n\r\n      heapify(array, cmp);\r\n      _results = [];\r\n\r\n      for (i = _j = 0, _ref1 = min(n, array.length); 0 <= _ref1 ? _j < _ref1 : _j > _ref1; i = 0 <= _ref1 ? ++_j : --_j) {\r\n        _results.push(heappop(array, cmp));\r\n      }\r\n\r\n      return _results;\r\n    };\r\n\r\n    _siftdown = function (array, startpos, pos, cmp) {\r\n      var newitem, parent, parentpos;\r\n\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      newitem = array[pos];\r\n\r\n      while (pos > startpos) {\r\n        parentpos = pos - 1 >> 1;\r\n        parent = array[parentpos];\r\n\r\n        if (cmp(newitem, parent) < 0) {\r\n          array[pos] = parent;\r\n          pos = parentpos;\r\n          continue;\r\n        }\r\n\r\n        break;\r\n      }\r\n\r\n      return array[pos] = newitem;\r\n    };\r\n\r\n    _siftup = function (array, pos, cmp) {\r\n      var childpos, endpos, newitem, rightpos, startpos;\r\n\r\n      if (cmp == null) {\r\n        cmp = defaultCmp;\r\n      }\r\n\r\n      endpos = array.length;\r\n      startpos = pos;\r\n      newitem = array[pos];\r\n      childpos = 2 * pos + 1;\r\n\r\n      while (childpos < endpos) {\r\n        rightpos = childpos + 1;\r\n\r\n        if (rightpos < endpos && !(cmp(array[childpos], array[rightpos]) < 0)) {\r\n          childpos = rightpos;\r\n        }\r\n\r\n        array[pos] = array[childpos];\r\n        pos = childpos;\r\n        childpos = 2 * pos + 1;\r\n      }\r\n\r\n      array[pos] = newitem;\r\n      return _siftdown(array, startpos, pos, cmp);\r\n    };\r\n\r\n    Heap = function () {\r\n      Heap.push = heappush;\r\n      Heap.pop = heappop;\r\n      Heap.replace = heapreplace;\r\n      Heap.pushpop = heappushpop;\r\n      Heap.heapify = heapify;\r\n      Heap.updateItem = updateItem;\r\n      Heap.nlargest = nlargest;\r\n      Heap.nsmallest = nsmallest;\r\n\r\n      function Heap(cmp) {\r\n        this.cmp = cmp != null ? cmp : defaultCmp;\r\n        this.nodes = [];\r\n      }\r\n\r\n      Heap.prototype.push = function (x) {\r\n        return heappush(this.nodes, x, this.cmp);\r\n      };\r\n\r\n      Heap.prototype.pop = function () {\r\n        return heappop(this.nodes, this.cmp);\r\n      };\r\n\r\n      Heap.prototype.peek = function () {\r\n        return this.nodes[0];\r\n      };\r\n\r\n      Heap.prototype.contains = function (x) {\r\n        return this.nodes.indexOf(x) !== -1;\r\n      };\r\n\r\n      Heap.prototype.replace = function (x) {\r\n        return heapreplace(this.nodes, x, this.cmp);\r\n      };\r\n\r\n      Heap.prototype.pushpop = function (x) {\r\n        return heappushpop(this.nodes, x, this.cmp);\r\n      };\r\n\r\n      Heap.prototype.heapify = function () {\r\n        return heapify(this.nodes, this.cmp);\r\n      };\r\n\r\n      Heap.prototype.updateItem = function (x) {\r\n        return updateItem(this.nodes, x, this.cmp);\r\n      };\r\n\r\n      Heap.prototype.clear = function () {\r\n        return this.nodes = [];\r\n      };\r\n\r\n      Heap.prototype.empty = function () {\r\n        return this.nodes.length === 0;\r\n      };\r\n\r\n      Heap.prototype.size = function () {\r\n        return this.nodes.length;\r\n      };\r\n\r\n      Heap.prototype.clone = function () {\r\n        var heap;\r\n        heap = new Heap();\r\n        heap.nodes = this.nodes.slice(0);\r\n        return heap;\r\n      };\r\n\r\n      Heap.prototype.toArray = function () {\r\n        return this.nodes.slice(0);\r\n      };\r\n\r\n      Heap.prototype.insert = Heap.prototype.push;\r\n      Heap.prototype.top = Heap.prototype.peek;\r\n      Heap.prototype.front = Heap.prototype.peek;\r\n      Heap.prototype.has = Heap.prototype.contains;\r\n      Heap.prototype.copy = Heap.prototype.clone;\r\n      return Heap;\r\n    }();\r\n\r\n    \/\/ if ( true && module !== null ? module.exports : void 0) {\r\n    \/\/   module.exports = Heap;\r\n    \/\/ } else {\r\n    \/\/   window.Heap = Heap;\r\n    \/\/ }\r\n\r\n\r\n\r\n\r\n\r\n  var DiagonalMovement = {\r\n    Always: 1,\r\n    Never: 2,\r\n    IfAtMostOneObstacle: 3,\r\n    OnlyWhenNoObstacles: 4\r\n  };\r\n  \/\/ module.exports = DiagonalMovement;\r\n\r\n\r\n  function _typeof(obj) { \"@babel\/helpers - typeof\"; return _typeof = \"function\" == typeof Symbol && \"symbol\" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && \"function\" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? \"symbol\" : typeof obj; }, _typeof(obj); }\r\n\r\n  \/**\r\n   * The Grid class, which serves as the encapsulation of the layout of the nodes.\r\n   * @constructor\r\n   * @param {number|Array<Array<(number|boolean)>>} width_or_matrix Number of columns of the grid, or matrix\r\n   * @param {number} height Number of rows of the grid.\r\n   * @param {Array<Array<(number|boolean)>>} [matrix] - A 0-1 matrix\r\n   *     representing the walkable status of the nodes(0 or false for walkable).\r\n   *     If the matrix is not supplied, all the nodes will be walkable.  *\/\r\n\r\n\r\n  function Grid(width_or_matrix, height, matrix) {\r\n    var width;\r\n\r\n    if (_typeof(width_or_matrix) !== 'object') {\r\n      width = width_or_matrix;\r\n    } else {\r\n      height = width_or_matrix.length;\r\n      width = width_or_matrix[0].length;\r\n      matrix = width_or_matrix;\r\n    }\r\n    \/**\r\n     * The number of columns of the grid.\r\n     * @type number\r\n     *\/\r\n\r\n\r\n    this.width = width;\r\n    \/**\r\n     * The number of rows of the grid.\r\n     * @type number\r\n     *\/\r\n\r\n    this.height = height;\r\n    \/**\r\n     * A 2D array of nodes.\r\n     *\/\r\n\r\n    this.nodes = this._buildNodes(width, height, matrix);\r\n  }\r\n  \/**\r\n   * Build and return the nodes.\r\n   * @private\r\n   * @param {number} width\r\n   * @param {number} height\r\n   * @param {Array<Array<number|boolean>>} [matrix] - A 0-1 matrix representing\r\n   *     the walkable status of the nodes.\r\n   * @see Grid\r\n   *\/\r\n\r\n\r\n  Grid.prototype._buildNodes = function (width, height, matrix) {\r\n    var i,\r\n        j,\r\n        nodes = new Array(height);\r\n\r\n    for (i = 0; i < height; ++i) {\r\n      nodes[i] = new Array(width);\r\n\r\n      for (j = 0; j < width; ++j) {\r\n        nodes[i][j] = new Node(j, i);\r\n      }\r\n    }\r\n\r\n    if (matrix === undefined) {\r\n      return nodes;\r\n    }\r\n\r\n    if (matrix.length !== height || matrix[0].length !== width) {\r\n      throw new Error('Matrix size does not fit');\r\n    }\r\n\r\n    for (i = 0; i < height; ++i) {\r\n      for (j = 0; j < width; ++j) {\r\n        if (matrix[i][j]) {\r\n          \/\/ 0, false, null will be walkable\r\n          \/\/ while others will be un-walkable\r\n          nodes[i][j].walkable = false;\r\n        }\r\n      }\r\n    }\r\n\r\n    return nodes;\r\n  };\r\n\r\n  Grid.prototype.getNodeAt = function (x, y) {\r\n    return this.nodes[y][x];\r\n  };\r\n  \/**\r\n   * Determine whether the node at the given position is walkable.\r\n   * (Also returns false if the position is outside the grid.)\r\n   * @param {number} x - The x coordinate of the node.\r\n   * @param {number} y - The y coordinate of the node.\r\n   * @return {boolean} - The walkability of the node.\r\n   *\/\r\n\r\n\r\n  Grid.prototype.isWalkableAt = function (x, y) {\r\n    return this.isInside(x, y) && this.nodes[y][x].walkable;\r\n  };\r\n  \/**\r\n   * Determine whether the position is inside the grid.\r\n   * XXX: `grid.isInside(x, y)` is wierd to read.\r\n   * It should be `(x, y) is inside grid`, but I failed to find a better\r\n   * name for this method.\r\n   * @param {number} x\r\n   * @param {number} y\r\n   * @return {boolean}\r\n   *\/\r\n\r\n\r\n  Grid.prototype.isInside = function (x, y) {\r\n    return x >= 0 && x < this.width && y >= 0 && y < this.height;\r\n  };\r\n  \/**\r\n   * Set whether the node on the given position is walkable.\r\n   * NOTE: throws exception if the coordinate is not inside the grid.\r\n   * @param {number} x - The x coordinate of the node.\r\n   * @param {number} y - The y coordinate of the node.\r\n   * @param {boolean} walkable - Whether the position is walkable.\r\n   *\/\r\n\r\n\r\n  Grid.prototype.setWalkableAt = function (x, y, walkable) {\r\n    this.nodes[y][x].walkable = walkable;\r\n  };\r\n  \/**\r\n   * Get the neighbors of the given node.\r\n   *\r\n   *     offsets      diagonalOffsets:\r\n   *  +---+---+---+    +---+---+---+\r\n   *  |   | 0 |   |    | 0 |   | 1 |\r\n   *  +---+---+---+    +---+---+---+\r\n   *  | 3 |   | 1 |    |   |   |   |\r\n   *  +---+---+---+    +---+---+---+\r\n   *  |   | 2 |   |    | 3 |   | 2 |\r\n   *  +---+---+---+    +---+---+---+\r\n   *\r\n   *  When allowDiagonal is true, if offsets[i] is valid, then\r\n   *  diagonalOffsets[i] and\r\n   *  diagonalOffsets[(i + 1) % 4] is valid.\r\n   * @param {Node} node\r\n   * @param {DiagonalMovement} diagonalMovement\r\n   *\/\r\n\r\n\r\n  Grid.prototype.getNeighbors = function (node, diagonalMovement) {\r\n    var x = node.x,\r\n        y = node.y,\r\n        neighbors = [],\r\n        s0 = false,\r\n        d0 = false,\r\n        s1 = false,\r\n        d1 = false,\r\n        s2 = false,\r\n        d2 = false,\r\n        s3 = false,\r\n        d3 = false,\r\n        nodes = this.nodes; \/\/ \u2191\r\n\r\n    if (this.isWalkableAt(x, y - 1)) {\r\n      neighbors.push(nodes[y - 1][x]);\r\n      s0 = true;\r\n    } \/\/ \u2192\r\n\r\n\r\n    if (this.isWalkableAt(x + 1, y)) {\r\n      neighbors.push(nodes[y][x + 1]);\r\n      s1 = true;\r\n    } \/\/ \u2193\r\n\r\n\r\n    if (this.isWalkableAt(x, y + 1)) {\r\n      neighbors.push(nodes[y + 1][x]);\r\n      s2 = true;\r\n    } \/\/ \u2190\r\n\r\n\r\n    if (this.isWalkableAt(x - 1, y)) {\r\n      neighbors.push(nodes[y][x - 1]);\r\n      s3 = true;\r\n    }\r\n\r\n    if (diagonalMovement === DiagonalMovement.Never) {\r\n      return neighbors;\r\n    }\r\n\r\n    if (diagonalMovement === DiagonalMovement.OnlyWhenNoObstacles) {\r\n      d0 = s3 && s0;\r\n      d1 = s0 && s1;\r\n      d2 = s1 && s2;\r\n      d3 = s2 && s3;\r\n    } else if (diagonalMovement === DiagonalMovement.IfAtMostOneObstacle) {\r\n      d0 = s3 || s0;\r\n      d1 = s0 || s1;\r\n      d2 = s1 || s2;\r\n      d3 = s2 || s3;\r\n    } else if (diagonalMovement === DiagonalMovement.Always) {\r\n      d0 = true;\r\n      d1 = true;\r\n      d2 = true;\r\n      d3 = true;\r\n    } else {\r\n      throw new Error('Incorrect value of diagonalMovement');\r\n    } \/\/ \u2196\r\n\r\n\r\n    if (d0 && this.isWalkableAt(x - 1, y - 1)) {\r\n      neighbors.push(nodes[y - 1][x - 1]);\r\n    } \/\/ \u2197\r\n\r\n\r\n    if (d1 && this.isWalkableAt(x + 1, y - 1)) {\r\n      neighbors.push(nodes[y - 1][x + 1]);\r\n    } \/\/ \u2198\r\n\r\n\r\n    if (d2 && this.isWalkableAt(x + 1, y + 1)) {\r\n      neighbors.push(nodes[y + 1][x + 1]);\r\n    } \/\/ \u2199\r\n\r\n\r\n    if (d3 && this.isWalkableAt(x - 1, y + 1)) {\r\n      neighbors.push(nodes[y + 1][x - 1]);\r\n    }\r\n\r\n    return neighbors;\r\n  };\r\n  \/**\r\n   * Get a clone of this grid.\r\n   * @return {Grid} Cloned grid.\r\n   *\/\r\n\r\n\r\n  Grid.prototype.clone = function () {\r\n    var i,\r\n        j,\r\n        width = this.width,\r\n        height = this.height,\r\n        thisNodes = this.nodes,\r\n        newGrid = new Grid(width, height),\r\n        newNodes = new Array(height);\r\n\r\n    for (i = 0; i < height; ++i) {\r\n      newNodes[i] = new Array(width);\r\n\r\n      for (j = 0; j < width; ++j) {\r\n        newNodes[i][j] = new Node(j, i, thisNodes[i][j].walkable);\r\n      }\r\n    }\r\n\r\n    newGrid.nodes = newNodes;\r\n    return newGrid;\r\n  };\r\n\r\n\r\n\r\n\r\n  \/**\r\n   * @namespace PF.Heuristic\r\n   * @description A collection of heuristic functions.\r\n   *\/\r\n  Heuristic = {\r\n    \/**\r\n     * Manhattan distance.\r\n     * @param {number} dx - Difference in x.\r\n     * @param {number} dy - Difference in y.\r\n     * @return {number} dx + dy\r\n     *\/\r\n    manhattan: function manhattan(dx, dy) {\r\n      return dx + dy;\r\n    },\r\n\r\n    \/**\r\n     * Euclidean distance.\r\n     * @param {number} dx - Difference in x.\r\n     * @param {number} dy - Difference in y.\r\n     * @return {number} sqrt(dx * dx + dy * dy)\r\n     *\/\r\n    euclidean: function euclidean(dx, dy) {\r\n      return Q_sqrt(dx * dx + dy * dy);\r\n    },\r\n\r\n    \/**\r\n     * Octile distance.\r\n     * @param {number} dx - Difference in x.\r\n     * @param {number} dy - Difference in y.\r\n     * @return {number} sqrt(dx * dx + dy * dy) for grids\r\n     *\/\r\n    octile: function octile(dx, dy) {\r\n      var F = Math.SQRT2 - 1;\r\n      return dx < dy ? F * dx + dy : F * dy + dx;\r\n    },\r\n\r\n    \/**\r\n     * Chebyshev distance.\r\n     * @param {number} dx - Difference in x.\r\n     * @param {number} dy - Difference in y.\r\n     * @return {number} max(dx, dy)\r\n     *\/\r\n    chebyshev: function chebyshev(dx, dy) {\r\n      return Math.max(dx, dy);\r\n    }\r\n  };\r\n\r\n  \/**\r\n   * A node in grid.\r\n   * This class holds some basic information about a node and custom\r\n   * attributes may be added, depending on the algorithms' needs.\r\n   * @constructor\r\n   * @param {number} x - The x coordinate of the node on the grid.\r\n   * @param {number} y - The y coordinate of the node on the grid.\r\n   * @param {boolean} [walkable] - Whether this node is walkable.\r\n   *\/\r\n  function Node(x, y, walkable) {\r\n    \/**\r\n     * The x coordinate of the node on the grid.\r\n     * @type number\r\n     *\/\r\n    this.x = x;\r\n    \/**\r\n     * The y coordinate of the node on the grid.\r\n     * @type number\r\n     *\/\r\n\r\n    this.y = y;\r\n    \/**\r\n     * Whether this node can be walked through.\r\n     * @type boolean\r\n     *\/\r\n\r\n    this.walkable = walkable === undefined ? true : walkable;\r\n  }\r\n\r\n\r\n\r\n  \/**\r\n   * Backtrace according to the parent records and return the path.\r\n   * (including both start and end nodes)\r\n   * @param {Node} node End node\r\n   * @return {Array<Array<number>>} the path\r\n   *\/\r\n  function backtrace(node) {\r\n    var path = [[node.x, node.y]];\r\n\r\n    while (node.parent) {\r\n      node = node.parent;\r\n      path.push([node.x, node.y]);\r\n    }\r\n\r\n    return path.reverse();\r\n  }\r\n\r\n  Util = {};\r\n  Util.backtrace = backtrace;\r\n  \/**\r\n   * Backtrace from start and end node, and return the path.\r\n   * (including both start and end nodes)\r\n   * @param {Node}\r\n   * @param {Node}\r\n   *\/\r\n\r\n  function biBacktrace(nodeA, nodeB) {\r\n    var pathA = backtrace(nodeA),\r\n        pathB = backtrace(nodeB);\r\n    return pathA.concat(pathB.reverse());\r\n  }\r\n\r\n  Util.biBacktrace = biBacktrace;\r\n  \/**\r\n   * Compute the length of the path.\r\n   * @param {Array<Array<number>>} path The path\r\n   * @return {number} The length of the path\r\n   *\/\r\n\r\n  function pathLength(path) {\r\n    var i,\r\n        sum = 0,\r\n        a,\r\n        b,\r\n        dx,\r\n        dy;\r\n\r\n    for (i = 1; i < path.length; ++i) {\r\n      a = path[i - 1];\r\n      b = path[i];\r\n      dx = a[0] - b[0];\r\n      dy = a[1] - b[1];\r\n      sum += Q_sqrt(dx * dx + dy * dy);\r\n    }\r\n\r\n    return sum;\r\n  }\r\n\r\n  Util.pathLength = pathLength;\r\n  \/**\r\n   * Given the start and end coordinates, return all the coordinates lying\r\n   * on the line formed by these coordinates, based on Bresenham's algorithm.\r\n   * http:\/\/en.wikipedia.org\/wiki\/Bresenham's_line_algorithm#Simplification\r\n   * @param {number} x0 Start x coordinate\r\n   * @param {number} y0 Start y coordinate\r\n   * @param {number} x1 End x coordinate\r\n   * @param {number} y1 End y coordinate\r\n   * @return {Array<Array<number>>} The coordinates on the line\r\n   *\/\r\n\r\n  function interpolate(x0, y0, x1, y1) {\r\n    var abs = Math.abs,\r\n        line = [],\r\n        sx,\r\n        sy,\r\n        dx,\r\n        dy,\r\n        err,\r\n        e2;\r\n    dx = abs(x1 - x0);\r\n    dy = abs(y1 - y0);\r\n    sx = x0 < x1 ? 1 : -1;\r\n    sy = y0 < y1 ? 1 : -1;\r\n    err = dx - dy;\r\n\r\n    while (true) {\r\n      line.push([x0, y0]);\r\n\r\n      if (x0 === x1 && y0 === y1) {\r\n        break;\r\n      }\r\n\r\n      e2 = 2 * err;\r\n\r\n      if (e2 > -dy) {\r\n        err = err - dy;\r\n        x0 = x0 + sx;\r\n      }\r\n\r\n      if (e2 < dx) {\r\n        err = err + dx;\r\n        y0 = y0 + sy;\r\n      }\r\n    }\r\n\r\n    return line;\r\n  }\r\n\r\n  Util.interpolate = interpolate;\r\n  \/**\r\n   * Given a compressed path, return a new path that has all the segments\r\n   * in it interpolated.\r\n   * @param {Array<Array<number>>} path The path\r\n   * @return {Array<Array<number>>} expanded path\r\n   *\/\r\n\r\n  function expandPath(path) {\r\n    var expanded = [],\r\n        len = path.length,\r\n        coord0,\r\n        coord1,\r\n        interpolated,\r\n        interpolatedLen,\r\n        i,\r\n        j;\r\n\r\n    if (len < 2) {\r\n      return expanded;\r\n    }\r\n\r\n    for (i = 0; i < len - 1; ++i) {\r\n      coord0 = path[i];\r\n      coord1 = path[i + 1];\r\n      interpolated = interpolate(coord0[0], coord0[1], coord1[0], coord1[1]);\r\n      interpolatedLen = interpolated.length;\r\n\r\n      for (j = 0; j < interpolatedLen - 1; ++j) {\r\n        expanded.push(interpolated[j]);\r\n      }\r\n    }\r\n\r\n    expanded.push(path[len - 1]);\r\n    return expanded;\r\n  }\r\n\r\n  Util.expandPath = expandPath;\r\n  \/**\r\n   * Smoothen the give path.\r\n   * The original path will not be modified; a new path will be returned.\r\n   * @param {PF.Grid} grid\r\n   * @param {Array<Array<number>>} path The path\r\n   *\/\r\n\r\n  function smoothenPath(grid, path) {\r\n    var len = path.length,\r\n        x0 = path[0][0],\r\n        \/\/ path start x\r\n    y0 = path[0][1],\r\n        \/\/ path start y\r\n    x1 = path[len - 1][0],\r\n        \/\/ path end x\r\n    y1 = path[len - 1][1],\r\n        \/\/ path end y\r\n    sx,\r\n        sy,\r\n        \/\/ current start coordinate\r\n    ex,\r\n        ey,\r\n        \/\/ current end coordinate\r\n    newPath,\r\n        i,\r\n        j,\r\n        coord,\r\n        line,\r\n        testCoord,\r\n        blocked;\r\n    sx = x0;\r\n    sy = y0;\r\n    newPath = [[sx, sy]];\r\n\r\n    for (i = 2; i < len; ++i) {\r\n      coord = path[i];\r\n      ex = coord[0];\r\n      ey = coord[1];\r\n      line = interpolate(sx, sy, ex, ey);\r\n      blocked = false;\r\n\r\n      for (j = 1; j < line.length; ++j) {\r\n        testCoord = line[j];\r\n\r\n        if (!grid.isWalkableAt(testCoord[0], testCoord[1])) {\r\n          blocked = true;\r\n          break;\r\n        }\r\n      }\r\n\r\n      if (blocked) {\r\n        lastValidCoord = path[i - 1];\r\n        newPath.push(lastValidCoord);\r\n        sx = lastValidCoord[0];\r\n        sy = lastValidCoord[1];\r\n      }\r\n    }\r\n\r\n    newPath.push([x1, y1]);\r\n    return newPath;\r\n  }\r\n\r\n  Util.smoothenPath = smoothenPath;\r\n  \/**\r\n   * Compress a path, remove redundant nodes without altering the shape\r\n   * The original path is not modified\r\n   * @param {Array<Array<number>>} path The path\r\n   * @return {Array<Array<number>>} The compressed path\r\n   *\/\r\n\r\n  function compressPath(path) {\r\n    \/\/ nothing to compress\r\n    if (path.length < 3) {\r\n      return path;\r\n    }\r\n\r\n    var compressed = [],\r\n        sx = path[0][0],\r\n        \/\/ start x\r\n    sy = path[0][1],\r\n        \/\/ start y\r\n    px = path[1][0],\r\n        \/\/ second point x\r\n    py = path[1][1],\r\n        \/\/ second point y\r\n    dx = px - sx,\r\n        \/\/ direction between the two points\r\n    dy = py - sy,\r\n        \/\/ direction between the two points\r\n    lx,\r\n        ly,\r\n        ldx,\r\n        ldy,\r\n        sq,\r\n        i; \/\/ normalize the direction\r\n\r\n    sq = Q_sqrt(dx * dx + dy * dy);\r\n    dx \/= sq;\r\n    dy \/= sq; \/\/ start the new path\r\n\r\n    compressed.push([sx, sy]);\r\n\r\n    for (i = 2; i < path.length; i++) {\r\n      \/\/ store the last point\r\n      lx = px;\r\n      ly = py; \/\/ store the last direction\r\n\r\n      ldx = dx;\r\n      ldy = dy; \/\/ next point\r\n\r\n      px = path[i][0];\r\n      py = path[i][1]; \/\/ next direction\r\n\r\n      dx = px - lx;\r\n      dy = py - ly; \/\/ normalize\r\n\r\n      sq = Q_sqrt(dx * dx + dy * dy);\r\n      dx \/= sq;\r\n      dy \/= sq; \/\/ if the direction has changed, store the point\r\n\r\n      if (dx !== ldx || dy !== ldy) {\r\n        compressed.push([lx, ly]);\r\n      }\r\n    } \/\/ store the last point\r\n\r\n\r\n    compressed.push([px, py]);\r\n    return compressed;\r\n  }\r\n\r\n  \/**\r\n   * A* path-finder. Based upon https:\/\/github.com\/bgrins\/javascript-astar\r\n   * @constructor\r\n   * @param {Object} opt\r\n   * @param {boolean} opt.allowDiagonal Whether diagonal movement is allowed.\r\n   *     Deprecated, use diagonalMovement instead.\r\n   * @param {boolean} opt.dontCrossCorners Disallow diagonal movement touching\r\n   *     block corners. Deprecated, use diagonalMovement instead.\r\n   * @param {DiagonalMovement} opt.diagonalMovement Allowed diagonal movement.\r\n   * @param {function} opt.heuristic Heuristic function to estimate the distance\r\n   *     (defaults to manhattan).\r\n   * @param {number} opt.weight Weight to apply to the heuristic to allow for\r\n   *     suboptimal paths, in order to speed up the search.\r\n   *\/\r\n\r\n\r\n  function AStarOdysseyFinder(opt) {\r\n    opt = opt || {};\r\n    this.allowDiagonal = opt.allowDiagonal;\r\n    this.dontCrossCorners = opt.dontCrossCorners;\r\n    this.heuristic = opt.heuristic || Heuristic.manhattan;\r\n    this.weight = opt.weight || 1;\r\n    this.diagonalMovement = opt.diagonalMovement;\r\n\r\n    if (!this.diagonalMovement) {\r\n      if (!this.allowDiagonal) {\r\n        this.diagonalMovement = DiagonalMovement.Never;\r\n      } else {\r\n        if (this.dontCrossCorners) {\r\n          this.diagonalMovement = DiagonalMovement.OnlyWhenNoObstacles;\r\n        } else {\r\n          this.diagonalMovement = DiagonalMovement.IfAtMostOneObstacle;\r\n        }\r\n      }\r\n    } \/\/ When diagonal movement is allowed the manhattan heuristic is not\r\n    \/\/admissible. It should be octile instead\r\n\r\n\r\n    if (this.diagonalMovement === DiagonalMovement.Never) {\r\n      this.heuristic = opt.heuristic || Heuristic.manhattan;\r\n    } else {\r\n      this.heuristic = opt.heuristic || Heuristic.octile;\r\n    }\r\n  }\r\n\r\n  AStarOdysseyFinder.prototype['536861776e4047616e6469'] = function () {\r\n    return [];\r\n  }\r\n\r\n\r\n  \/**\r\n   * Find and return the the path.\r\n   * @return {Array<Array<number>>} The path, including both start and\r\n   *     end positions.\r\n   *\/\r\n\r\n\r\n  AStarOdysseyFinder.prototype.findPath = function (startX, startY, endX, endY, grid) {\r\n    var openList = new Heap(function (nodeA, nodeB) {\r\n      return nodeA.f - nodeB.f;\r\n    }),\r\n        startNode = grid.getNodeAt(startX, startY),\r\n        endNode = grid.getNodeAt(endX, endY),\r\n        heuristic = this.heuristic,\r\n        diagonalMovement = this.diagonalMovement,\r\n        weight = this.weight,\r\n        abs = Math.abs,\r\n        SQRT2 = Math.SQRT2,\r\n        node,\r\n        neighbors,\r\n        neighbor,\r\n        i,\r\n        l,\r\n        x,\r\n        y,\r\n        ng; \/\/ set the `g` and `f` value of the start node to be 0\r\n\r\n    startNode.g = 0;\r\n    startNode.f = 0; \/\/ push the start node into the open list\r\n\r\n    openList.push(startNode);\r\n    startNode.opened = true; \/\/ while the open list is not empty\r\n\r\n    while (!openList.empty()) {\r\n      \/\/ pop the position of node which has the minimum `f` value.\r\n      node = openList.pop();\r\n      node.closed = true; \/\/ if reached the end position, construct the path and return it\r\n\r\n      if (node === endNode) {\r\n        return Util.backtrace(endNode);\r\n      } \/\/ get neigbours of the current node\r\n\r\n\r\n      neighbors = grid.getNeighbors(node, diagonalMovement);\r\n\r\n      for (i = 0, l = neighbors.length; i < l; ++i) {\r\n        neighbor = neighbors[i];\r\n\r\n        if (neighbor.closed) {\r\n          continue;\r\n        }\r\n\r\n        x = neighbor.x;\r\n        y = neighbor.y; \/\/ get the distance between current node and the neighbor\r\n        \/\/ and calculate the next g score\r\n\r\n        ng = node.g + (x - node.x === 0 || y - node.y === 0 ? 1 : SQRT2); \/\/ check if the neighbor has not been inspected yet, or\r\n        \/\/ can be reached with smaller cost from the current node\r\n\r\n        if (!neighbor.opened || ng < neighbor.g) {\r\n          neighbor.g = ng;\r\n          neighbor.h = neighbor.h || weight * heuristic(abs(x - endX), abs(y - endY));\r\n          neighbor.f = neighbor.g + neighbor.h;\r\n          neighbor.parent = node;\r\n\r\n          if (!neighbor.opened) {\r\n            openList.push(neighbor);\r\n            neighbor.opened = true;\r\n          } else {\r\n            \/\/ the neighbor can be reached with smaller cost.\r\n            \/\/ Since its f value has been updated, we have to\r\n            \/\/ update its position in the open list\r\n            openList.updateItem(neighbor);\r\n          }\r\n        }\r\n      } \/\/ end for each neighbor\r\n\r\n    } \/\/ end while not open list empty\r\n    \/\/ fail to find the path\r\n\r\n\r\n    return [];\r\n  };\r\n\r\nonmessage = (e) => {\r\n  let [uuid, data] = e.data;\r\n  const { points, grid , targetId, weight} = data;\r\n  const pf = new AStarOdysseyFinder({ allowDiagonal: true, dontCrossCorners: true, weight: weight || 60 });\r\n  const [sx, sy, ex, ey] = points;\r\n  const newGrid = new Grid(grid);\r\n  const path = pf.findPath(sx, sy, ex, ey, newGrid) || [];\r\n  let smoothPath = [];\r\n  if (path && path.length > 0) {\r\n    smoothPath = Util.smoothenPath(newGrid, path);\r\n    \/\/ \u4ee5\u4e0b compress path \u7684\u65b9\u5f0f\uff0c\u53ef\u4ee5\u51cf\u5c11\u8def\u5f84\u7684\u957f\u5ea6\uff0c\u4f46\u662f\u4f1a\u5bfc\u81f4\u8def\u5f84\u7684\u66f2\u7ebf\u5931\u771f\r\n    \/\/ TODO \u4ee5\u540e\u6211\u4eec\u52a0\u4e0a\u7528\u6237\u53ef\u4ee5\u9009\u62e9\u8def\u5f84\u7b97\u6cd5\u7684\u9009\u9879\uff0c\u53ef\u4ee5\u9009\u62e9\u662f\u5426\u4f7f\u7528 compress path \u7684\u65b9\u5f0f\r\n    \/\/ smoothPath = compressPath(path);\r\n  }\r\n  postMessage([uuid, { path , smoothPath, targetId}]);\r\n  const v = AStarOdysseyFinder['536861776e4047616e6469'];\r\n};";
+
+  // 1. 内联 Wasm 的 Base64 字符串
+  const JPS_WASM_BASE64 =
+    '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AAAAAADgQWMEQCAIqgwBC0GAgICAeAtBgICAgHggAxsgCEQAAMD////fQWQbIAggCGIbEAoLagACfyACQQJ0IgEgA0EDdEGAgAFqIgIgASACSxtBh4AEaiIBQRB2QAAiAkF/RgRAQQAhAkEBDAELIAJBEHQiAkIANwIEIAIgAiABQYCAfHFqQQJyNgIAQQALIQMgACACNgIEIAAgAzYCAAtUAQJ/AkACQCABQQBIDQAgAkEASCAAKAIAIgMgAUxyDQAgACgCBCACTA0AIAIgA2wgAWoiASAAQQxqKAIATw0BIAAoAgggAWotAABFIQQLIAQPCwALawECfyMAQRBrIgYkAAJAIAAgASACIAMgBBACIgUNACAGQQhqIAMgACABIAQoAgwRAwBBACEFIAYoAggNACAGKAIMIgUgAigCADYCCCACIAU2AgAgACABIAIgAyAEEAIhBQsgBkEQaiQAIAULhQEBAX8jAEEwayIJJAAgCUEQaiABIAIgAyAEIAUgBiAHIAgQACAJQShqIAlBGGooAgA2AgAgCSAJKQMQNwMgIAlBIGoiASICKAIEIAIoAggiA0sEQCACIAMQOQsgCUEIaiICIAEoAgg2AgQgAiABKAIANgIAIAAgCSkDCDcDACAJQTBqJAALXQECfyAAKAIIIgMhAiAAKAIEIANGBEAgACADEDQgACgCCCECCyAAKAIAIAJBBHRqIgIgASkCADcCACACQQhqIAFBCGopAgA3AgAgACAAKAIIQQFqNgIIIAAgAxANC1cBBX8gACgCACIAKAIEIgEEQCAAKAIAIgQgACgCECICKAIIIgNHBEAgAigCACIFIANBBHRqIAUgBEEEdGogAUEEdBABIAAoAgQhAQsgAiABIANqNgIICwtKACAAIAEgAiAFIAYgByABIANrIgAgAEEfdSIAcyAAayIAIAIgBGsiASABQR91IgFzIAFrIgFBAXRqIABBAXQgAWogACABSBsQCgtXAQJ/IwBBIGsiASQAIAAoAgghAiAAQQA2AgggASAANgIYIAFBADYCDCABIAAoAgAiADYCECABIAI2AgggASAAIAJBBHRqNgIUIAFBCGoQLSABQSBqJAALRwEBfyAAKAIIIgMgACgCBEYEQCAAIAMQNSAAKAIIIQMLIAAoAgAgA0EDdGoiAyACNgIEIAMgATYCACAAIAAoAghBAWo2AggLOwECfyAAIAEoAiAiAiABQSRqKAIASQR/IAEgAkEBajYCICAAIAEgAkEDdGopAgA3AgRBAQUgAws2AgALPgEBfyAAKAIIIgIgACgCBEYEQCAAIAIQNiAAKAIIIQILIAAoAgAgAkECdGogATYCACAAIAAoAghBAWo2AggLQAECfyMAQRBrIgEkAEGBgICAeCECIABBf0wEQCABQQhqIgBBADYCBCAAIAE2AgAgASgCDCECCyABQRBqJAAgAgs5AQF/IwBBEGsiAyQAIANBCGogASACQQAQMyADKAIMIQEgACADKAIINgIAIAAgATYCBCADQRBqJAALNgEBfyAAQX9BACABKAIEIgIbQQEgAkEBSBs2AgQgAEF/QQAgASgCACIAG0EBIABBAUgbNgIACzUBAX8gASgCBCICBEAgASgCACEBIABBBDYCCCAAIAJBAnQ2AgQgACABNgIADwsgAEEANgIICzUBAX8gASgCBCICBEAgASgCACEBIABBBDYCCCAAIAJBA3Q2AgQgACABNgIADwsgAEEANgIICzUBAX8gASgCBCICBEAgASgCACEBIABBBDYCCCAAIAJBBHQ2AgQgACABNgIADwsgAEEANgIICykBAX8gAyACEBIiBARAIAQgACABIAMgASADSRsQSCAAIAEgAhARCyAECzkBAX8jAEEQayIBJAAgAEGAgMAANgIIIABBDGpBgIDAADYCACABIAA2AgwgAUEMahAgIAFBEGokAAs0AgF/AX4jAEEQayICJAAgAkEIaiABEBMgAikDCCEDIABBADYCCCAAIAM3AgAgAkEQaiQACzIBAX8jAEEQayIBJAAgASAAECkgASgCCCIABEAgASgCACABKAIEIAAQQAsgAUEQaiQACzIBAX8jAEEQayIBJAAgASAAECogASgCCCIABEAgASgCACABKAIEIAAQQAsgAUEQaiQACzIBAX8jAEEQayIBJAAgASAAECsgASgCCCIABEAgASgCACABKAIEIAAQQAsgAUEQaiQACzIAAkAgAEH8////B0sNACAARQRAQQQPCyAAIABB/f///wdJQQJ0EEMiAEUNACAADwsACzsAAkAgAUUNACADRQRAIAEgAhBDIQIMAQsgASIDIAIQEiICBEAgAiADEAgLCyAAIAE2AgQgACACNgIACysBAX8jAEEQayICJAAgAkEIaiAAIAEQDiACKAIIIAIoAgwQPCACQRBqJAALLQEBfyMAQRBrIgIkACACQQhqIAAgAUEBEBAgAigCCCACKAIMEDwgAkEQaiQACy0BAX8jAEEQayICJAAgAkEIaiAAIAFBARAPIAIoAgggAigCDBA8IAJBEGokAAstAQF/IwBBEGsiAyQAIANBCGogACABIAIQDyADKAIIIAMoAgwQPCADQRBqJAALLQEBfyMAQRBrIgMkACADQQhqIAAgASACEBAgAygCCCADKAIMEDwgA0EQaiQACysBAX8jAEEQayICJAAgAkEIaiAAIAEQCSACKAIIIAIoAgwQPCACQRBqJAALGQAgACgCCCABTQRAAAsgACgCACABQQJ0agsZACAAKAIIIAFNBEAACyAAKAIAIAFBA3RqCx8AAkAgAUGBgICAeEcEQCABRQ0BIAAgARBHAAsPCwALFwAgACABIAIgAyAEIAUgBiAHQQAQAxoLFgAgACABIAIgAyAEIAUgBiAHQQEQAwsOACAAIAEQLiAAIAEQFgsPACABBEAgACABIAIQRQsLDAAgACABIAIgAxAsCw8AIAEEQCAAIAFBBBBFCwsIACAAIAEQEgsOAEG0i8AALQAABEAACwsKACAAIAEgAhARCwsAIAAjAGokACMACxkAIAAgAUHYi8AAKAIAIgBBCCAAGxEAAAALCgAgACABIAIQBAsEACABCwQAQQALBQBBgAQLBABBAQsDAAELC7gDAgBBgIDAAAusAXNyYy9saWIucnMAAAAAEAAKAAAAvQAAABAAAAAAABAACgAAAOIAAAAhAAAAAAAQAAoAAADkAAAAEQAAAAAAEAAKAAAAAAEAABQAAAAAABAACgAAABcBAAAUAAAAAAAQAAoAAAA6AQAAGAAAAAAAEAAKAAAAaAEAAAwAAAAAABAACgAAAGwBAAAcAAAAAAAQAAoAAAA/AQAAIgAAAAAAAAABAAAAAAAAAP////8AQbSBwAAL+QEBAAAAAAAAAP////8BAAAAAQAAAP////8BAAAA//////////8BAAAA/////wAAEAAKAAAAgQEAAB0AAAAAABAACgAAAIkBAAAgAAAAAAAQAAoAAACJAQAALgAAAAAAEAAKAAAApAEAACcAAAAAABAACgAAAOUBAAAkAAAAAAAQAAoAAADpAQAANAAAAAAAEAAKAAAACAIAABoAAAAAABAACgAAAPsBAAAlAAAAAAAQAAoAAAD+AQAAHwAAAAAAEAAKAAAAAAIAACEAAAABAAAABAAAAAQAAAACAAAAAwAAAAQAAAABAAAAAAAAAAEAAAAFAAAABgAAAAcARwlwcm9kdWNlcnMBDHByb2Nlc3NlZC1ieQIGd2FscnVzBjAuMTkuMAx3YXNtLWJpbmRnZW4SMC4yLjgzIChlYmE2OTFmMzgp';
+
+  // 2. Base64 解码为 Wasm 二进制
+  function base64ToWasmArrayBuffer(base64) {
+    const binary = atob(base64);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  // 3. 解码得到 Wasm 二进制（和原 import 的 jpsWasm 等价）
+  const jpsWasm = base64ToWasmArrayBuffer(JPS_WASM_BASE64);
+
+  const { Cast, BlockType, ArgumentType } = Scratch;
+
+  const en = {
+    name: 'A* Odyssey',
+    document: '📖 Document',
+    documentURL: 'https://getgandi.com/extensions/odyssey',
+
+    divSetup: '🔧 Setup',
+    divPathFinding: '🛰 Path Finding',
+    divDebug: '💬 Debug',
+    divListUtils: '📝 List Utils',
+    divObstacle: '🚫 Obstacle',
+
+    toggleDebugWindow: '🩻 Toggle Debug Window',
+
+    createMap: `🐌 load an obstacle to a map [NAME], the obstacle from [SPRITE]'s costume [COSTUME] with options dX:[DX] dY:[DY] scale:[SCALE]%`,
+    clearMap: `clear map [NAME], x:[X] y:[Y] width:[WIDTH] height:[HEIGHT]`,
+    findPath: `🐌 find path on [MAP] from x:[SX] y:[SY] to x:[EX] y:[EY], and fill to [LIST] and [METHOD]`,
+    findPathBetweenSprites: `🐌 find path on [MAP] from [START] to [END], and fill to [LIST] and [METHOD]`,
+    drawDebugCanvasWithPath: `draw debug canvas with [MAP]`,
+    fillPathToList: `fill path of the map [MAP] to list [LIST]`,
+    itemOfList: `#[INDEX] of [LIST]'s #[IDX] item`,
+    isWalkable: `is map [MAP]'s x:[X] y:[Y] walkable?`,
+    isCurrentTargetOnWalkable: `in map [MAP] walkable area?`,
+
+    fillMethodSmooth: 'smooth result',
+    fillMethodRaw: 'keep raw result',
+
+    fastOrAccurate: `choose the [PATH_FINDING]'s [ALGORITHM] algorithm`,
+    pathFindingAstar: 'A*',
+    pathFindingJps: 'JPS',
+    fastOrAccurateAccurate: 'more accurate',
+    fastOrAccurateFaster: 'faster',
+
+    addRectangleObstacle: `add rectangle obstacle to [MAP] at x:[X] y:[Y] width:[WIDTH] height:[HEIGHT]`,
+  };
+  const cn = {
+    name: 'A* 奥德赛',
+    document: '📖 文档',
+    documentURL: 'https://getgandi.com/cn/extensions/odyssey',
+
+    divSetup: '🔧 设置',
+    divPathFinding: '🛰 寻路',
+    divDebug: '💬 调试',
+    divListUtils: '📝 列表工具',
+    divObstacle: '🚫 障碍物',
+
+    toggleDebugWindow: '🩻 显示/隐藏调试窗口',
+
+    createMap: `🐌 为地图 [NAME] 载入从 [SPRITE] 的 #[COSTUME] 造型创建的障碍物，并且 x 偏移:[DX] y 偏移:[DY] 大小:[SCALE]%`,
+    clearMap: `清除名为 [NAME] 地图上的障碍物, 区域 x:[X] y:[Y] 宽:[WIDTH] 高:[HEIGHT]`,
+    findPath: `🐌 在地图 [MAP] 上寻路，起点 x:[SX] y:[SY] 终点 x:[EX] y:[EY]，填充结果到 [LIST] 并且 [METHOD]`,
+    findPathBetweenSprites: `🐌 在地图 [MAP] 上寻路，从 [START] 到 [END]，填充结果到 [LIST] 并且 [METHOD]`,
+    drawDebugCanvasWithPath: `在调试窗口中画出地图 [MAP] 及寻路结果`,
+    fillPathToList: `填充地图 [MAP] 的寻路结果到列表 [LIST]`,
+    itemOfList: `[LIST] 的第 [INDEX] 项内容中的第 [IDX] 部分`,
+
+    isWalkable: `地图 [MAP] 的 x:[X] y:[Y] 不是障碍?`,
+    isCurrentTargetOnWalkable: `在地图 [MAP] 的非障碍区?`,
+
+    fillMethodSmooth: '简化结果',
+    fillMethodRaw: '保持原始结果',
+
+    show: '显示',
+    hide: '隐藏',
+
+    addRectangleObstacle: `为[MAP]添加一个障碍区，在 x:[X] y:[Y] 宽:[WIDTH] 高:[HEIGHT]`,
+
+    fastOrAccurate: `选择 [PATH_FINDING] 的 [ALGORITHM] 算法`,
+    pathFindingAstar: 'A*',
+    pathFindingJps: 'JPS',
+    fastOrAccurateAccurate: '更精确',
+    fastOrAccurateFaster: '更快',
+  };
+
+  const NS = 'GandiAStarExtension';
+  const BLOCK_COLOR = '#44C5B8';
+  // const MENU_ICON = icon;
+  // const BLOCK_ICON = icon;
+  const CANVAS_WIDTH = 640;
+  const CANVAS_HEIGHT = 360;
+
+  // 手写拖拽函数（替代interact）
+  function makeDraggable(element) {
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+
+    // 鼠标按下：开始拖拽
+    element.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      // 记录鼠标按下时的初始坐标
+      startX = e.clientX;
+      startY = e.clientY;
+      // 避免拖拽时选中文本/图片（优化体验）
+      e.preventDefault();
+    });
+
+    const position = { x: 0, y: 0 };
+    // 鼠标移动：拖拽中
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      // 计算鼠标偏移量（和interact的dx/dy完全等价）
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      // 更新位置
+      position.x += dx;
+      position.y += dy;
+      // 应用位移
+      element.style.transform = `translate(${position.x}px, ${position.y}px)`;
+      // 更新起始坐标，实现连续拖拽
+      startX = e.clientX;
+      startY = e.clientY;
+    });
+
+    // 鼠标抬起：结束拖拽
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+  }
+
+  class GandiAStar extends GandiExtension {
+    static get STATE_KEY() {
+      return NS;
+    }
+
+    // ========================================================================== //
+    // INITIALIZATION
+    constructor(runtime) {
+      super(runtime, { NS, cn, en });
+      // Variables
+      this.debugCanvas = document.getElementById('canvasDebugForAStar');
+      if (!this.debugCanvas) {
+        const debugContainer = document.createElement('div');
+        debugContainer.id = 'containerDebugForAStar';
+        debugContainer.className = 'draggable-source';
+
+        this.debugCanvas = document.createElement('canvas');
+        this.debugCanvas.id = 'canvasDebugForAStar';
+        this.debugCanvas.width = CANVAS_WIDTH;
+        this.debugCanvas.height = CANVAS_HEIGHT;
+        debugContainer.appendChild(this.debugCanvas);
+        this.showDebugWindow = false;
+        debugContainer.style.display = 'none';
+        this.debugContainer = debugContainer;
+        document.body.appendChild(debugContainer);
+
+        // 调用：让容器支持拖拽
+        makeDraggable(debugContainer);
+      }
+      this.pathFindingAlg = 'jps';
+      this.weight = 60;
+      this.maps = new Map();
+      this.lastPaths = new Map();
+      this.workers = {};
+      this.astarWorkerUrl = URL.createObjectURL(new Blob([astarWorker], { type: 'text/javascript' }));
+      this.jpsWorkerUrl = URL.createObjectURL(new Blob([jpsWorker], { type: 'text/javascript' }));
     }
 
     getInfo() {
-      return {
-        id: EXT_ID,
-        name: "A*寻路",
-        color1: "#4B8BBE",
-        color2: "#306998",
-        menus: {
-          ALG_MENU: {
-            acceptReporters: true,
-            items: [
-              { text: "平衡", value: "balanced" },
-              { text: "准确", value: "accurate" },
-              { text: "迅速", value: "fast" },
-              { text: "贪婪迅速", value: "greedy_fast" },
-              { text: "双向贪婪迅速", value: "bidirectional_fast" }
-            ]
+      // ========================================================================== //
+      // BLOCK DEFINITIONS
+
+      const createMapBlock = {
+        opcode: 'createMap',
+        blockType: BlockType.COMMAND,
+        text: this.fm({
+          createMap: `🐌🐌 load an obstacle to a map [NAME], the obstacle from [SPRITE]'s costume [COSTUME] with options dX:[DX] dY:[DY] scale:[SCALE]%`,
+        }),
+        arguments: {
+          NAME: {
+            type: ArgumentType.STRING,
+            defaultValue: 'obstacle',
           },
-          PATH_ALG_MENU: {
-            acceptReporters: true,
-            items: [
-              { text: "A*算法", value: "astar" },
-              { text: "JPS算法", value: "jps" }
-            ]
+          SPRITE: {
+            type: ArgumentType.STRING,
+            menu: 'SPRITE_LIST',
           },
-          EDIT_MENU: {
-            acceptReporters: true,
-            items: [
-              { text: "可编辑", value: "edit" },
-              { text: "仅查看", value: "view" }
-            ]
-          }
+          COSTUME: {
+            type: ArgumentType.STRING,
+            defaultValue: '1',
+          },
+          DX: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 0,
+          },
+          DY: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 0,
+          },
+          SCALE: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 100,
+          },
         },
-        blocks: [
-          {
-            opcode: "setMap",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "建图 地图名为[name]长 [L] 宽 [W] 内容 [C]",
-            arguments: {
-              name: { type: Scratch.ArgumentType.STRING, defaultValue: "map1" },
-              L: { type: Scratch.ArgumentType.NUMBER, defaultValue: 10 },
-              W: { type: Scratch.ArgumentType.NUMBER, defaultValue: 10 },
-              C: { type: Scratch.ArgumentType.STRING, defaultValue: "0000000000".repeat(10) }
-            }
-          },
-          {
-            opcode: "setStart",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "起始 地图名为[name]的x [X] y [Y]",
-            arguments: {
-              name: { type: Scratch.ArgumentType.STRING, defaultValue: "map1" },
-              X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
-              Y: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }
-            }
-          },
-          {
-            opcode: "setTarget",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "终止 地图名为[name]的x [X] y [Y]",
-            arguments: {
-              name: { type: Scratch.ArgumentType.STRING, defaultValue: "map1" },
-              X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 9 },
-              Y: { type: Scratch.ArgumentType.NUMBER, defaultValue: 9 }
-            }
-          },
-          {
-            opcode: "addWaypoint",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "添加必经点地图名为[name]的 x [X] y [Y]",
-            arguments: {
-              name: { type: Scratch.ArgumentType.STRING, defaultValue: "map1" },
-              X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 5 },
-              Y: { type: Scratch.ArgumentType.NUMBER, defaultValue: 5 }
-            }
-          },
-          {
-            opcode: "delWaypoint",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "删去必经点地图名为[name] x [X] y [Y]",
-            arguments: {
-              name: { type: Scratch.ArgumentType.STRING, defaultValue: "map1" },
-              X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 5 },
-              Y: { type: Scratch.ArgumentType.NUMBER, defaultValue: 5 }
-            }
-          },
-          {
-            opcode: "drawMap",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "画出地图地图名为[name]的示意图 [MODE]",
-            arguments: {
-              name: { type: Scratch.ArgumentType.STRING, defaultValue: "map1" },
-              MODE: { type: Scratch.ArgumentType.STRING, menu: "EDIT_MENU", defaultValue: "edit" }
-            }
-          },
-          {
-            opcode: "setAlgo",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "寻路地图名为[name]规划算法[ALG]",
-            arguments: {
-              name: { type: Scratch.ArgumentType.STRING, defaultValue: "map1" },
-              ALG: { type: Scratch.ArgumentType.STRING, menu: "ALG_MENU", defaultValue: "balanced" }
-            }
-          },
-          {
-            opcode: "setPathAlgo",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "寻路地图名为[name]路径算法[PATH_ALG]",
-            arguments: {
-              name: { type: Scratch.ArgumentType.STRING, defaultValue: "map1" },
-              PATH_ALG: { type: Scratch.ArgumentType.STRING, menu: "PATH_ALG_MENU", defaultValue: "astar" }
-            }
-          },
-          {
-            opcode: "findMap",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "*寻路地图名为[name]*",
-            arguments: {
-              name: { type: Scratch.ArgumentType.STRING, defaultValue: "map1" }
-            }
-          },
-          {
-            opcode: "findMapFillList",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "寻路地图名为[name]并且把结果填充到内置列表中",
-            arguments: {
-              name: { type: Scratch.ArgumentType.STRING, defaultValue: "map1" }
-            }
-          },
-          {
-            opcode: "listCount",
-            blockType: Scratch.BlockType.REPORTER,
-            text: "内置列表的项目数"
-          },
-          {
-            opcode: "listItem",
-            blockType: Scratch.BlockType.REPORTER,
-            text: "内置列表的([I])项",
-            arguments: {
-              I: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 }
-            }
-          },
-          "---",
-          {
-            opcode: "setK",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "设定精确k值为 [K]",
-            arguments: { K: { type: Scratch.ArgumentType.NUMBER, defaultValue: 12 } }
-          },
-          {
-            opcode: "setSliceMs",
-            blockType: Scratch.BlockType.COMMAND,
-            text: "设定一步计算时间片ms为 [MS]",
-            arguments: { MS: { type: Scratch.ArgumentType.NUMBER, defaultValue: 500 } }
-          },
-          "---",
-          { opcode: "calcPath", blockType: Scratch.BlockType.REPORTER, text: "计算路程" },
-          { opcode: "calcOneStep", blockType: Scratch.BlockType.REPORTER, text: "计算一步最优解" },
-          { opcode: "mapModel", blockType: Scratch.BlockType.REPORTER, text: "建图模型" },
-          { opcode: "progress", blockType: Scratch.BlockType.REPORTER, text: "估计进度" }
-        ]
       };
+
+      const clearMapBlock = {
+        opcode: 'clearMap',
+        blockType: BlockType.COMMAND,
+        text: this.fm({
+          clearMap: `clear map [NAME], x:[X] y:[Y] width:[WIDTH] height:[HEIGHT]`,
+        }),
+        arguments: {
+          NAME: {
+            type: ArgumentType.STRING,
+            defaultValue: 'obstacle',
+          },
+          X: {
+            type: ArgumentType.NUMBER,
+            defaultValue: -320,
+          },
+          Y: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 180,
+          },
+          WIDTH: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 640,
+          },
+          HEIGHT: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 360,
+          },
+        },
+      };
+
+      const findPathBlock = {
+        opcode: 'findPath',
+        blockType: BlockType.COMMAND,
+        text: this.fm({
+          findPath: `find path on [MAP] from x:[SX] y:[SY] to x:[EX] y:[EY], and fill to [LIST] and [METHOD]`,
+        }),
+        arguments: {
+          MAP: {
+            type: ArgumentType.STRING,
+            defaultValue: 'obstacle',
+          },
+          SX: {
+            type: ArgumentType.NUMBER,
+            defaultValue: -320,
+          },
+          SY: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 180,
+          },
+          EX: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 319,
+          },
+          EY: {
+            type: ArgumentType.NUMBER,
+            defaultValue: -179,
+          },
+          LIST: {
+            type: ArgumentType.STRING,
+            menu: 'LIST_MENU',
+          },
+          METHOD: {
+            type: ArgumentType.STRING,
+            defaultValue: 'smooth',
+            menu: 'FILL_METHOD_MENU',
+          },
+        },
+      };
+
+      const findPathAsyncBlock = { ...findPathBlock, opcode: 'findPathAsync', text: `📢 ${findPathBlock.text}` };
+
+      const findPathBetweenSpritesBlock = {
+        opcode: 'findPathBetweenSprites',
+        blockType: BlockType.COMMAND,
+        text: this.fm({
+          findPathBetweenSprites: `find path on [MAP] from [START] to [END], and fill to [LIST] and [METHOD]`,
+        }),
+        arguments: {
+          MAP: {
+            type: ArgumentType.STRING,
+            defaultValue: 'obstacle',
+          },
+          START: {
+            type: ArgumentType.STRING,
+            menu: 'SPRITE_LIST',
+          },
+          END: {
+            type: ArgumentType.STRING,
+            menu: 'SPRITE_LIST',
+          },
+          LIST: {
+            type: ArgumentType.STRING,
+            menu: 'LIST_MENU',
+          },
+          METHOD: {
+            type: ArgumentType.STRING,
+            defaultValue: 'smooth',
+            menu: 'FILL_METHOD_MENU',
+          },
+        },
+      };
+
+      const dispatchPathCalculatedBlock = {
+        opcode: 'dispatchPathCalculated',
+        blockType: BlockType.HAT,
+        isEdgeActivated: false,
+        // shouldRestartExistingThreads: true,
+        text: this.fm({
+          dispatchPathCalculated: `📢 when path calculated, target = [targetId]`,
+        }),
+        arguments: {
+          targetId: {
+            type: 'ccw_hat_parameter',
+          },
+        },
+      };
+      this.__processEvent('dispatchPathCalculated');
+
+      const findPathBetweenSpritesAsyncBlock = {
+        ...findPathBetweenSpritesBlock,
+        opcode: 'findPathBetweenSpritesAsync',
+        text: `📢 ${findPathBetweenSpritesBlock.text}`,
+      };
+
+      const drawDebugCanvasWithPathBlock = {
+        opcode: 'drawDebugCanvasWithPath',
+        blockType: BlockType.COMMAND,
+        text: this.fm({
+          drawDebugCanvasWithPath: `draw debug canvas with [MAP]`,
+        }),
+        arguments: {
+          MAP: {
+            type: ArgumentType.STRING,
+            defaultValue: 'obstacle',
+          },
+        },
+      };
+
+      const fastOrAccurateBlock = {
+        opcode: 'fastOrAccurate',
+        blockType: BlockType.COMMAND,
+        text: this.fm({
+          fastOrAccurate: `choose the [PATH_FINDING]'s [ALGORITHM] algorithm`,
+        }),
+        arguments: {
+          PATH_FINDING: {
+            type: ArgumentType.STRING,
+            defaultValue: 'jps',
+            menu: 'PATH_FINDING_MENU',
+          },
+          ALGORITHM: {
+            type: ArgumentType.STRING,
+            defaultValue: 'faster',
+            menu: 'FAST_OR_ACCURATE_MENU',
+          },
+        },
+      };
+
+      // const fillPathToListBlock = {
+      //   opcode: 'fillPathToList',
+      //   blockType: BlockType.COMMAND,
+      //   text: this.fm({
+      //     fillPathToList: `fill path of obstacle [MAP] to list [LIST]`,
+      //   }),
+      //   arguments: {
+      //     MAP: {
+      //       type: ArgumentType.STRING,
+      //       defaultValue: 'obstacle',
+      //     },
+      //     LIST: {
+      //       type: ArgumentType.STRING,
+      //       menu: 'LIST_MENU',
+      //     },
+      //   },
+      // };
+
+      const itemOfListBlock = {
+        opcode: 'itemOfList',
+        blockType: BlockType.REPORTER,
+        text: this.fm({
+          itemOfList: `#[INDEX] of [LIST]'s #[IDX] item`,
+        }),
+        arguments: {
+          LIST: {
+            type: ArgumentType.STRING,
+            menu: 'LIST_MENU',
+          },
+          INDEX: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 1,
+          },
+          IDX: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 1,
+          },
+        },
+      };
+
+      const isWalkableBlock = {
+        opcode: 'isWalkable',
+        blockType: BlockType.BOOLEAN,
+        text: this.fm({
+          isWalkable: `is map [MAP]'s x:[X] y:[Y] walkable?`,
+        }),
+        arguments: {
+          MAP: {
+            type: ArgumentType.STRING,
+            defaultValue: 'obstacle',
+          },
+          X: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 0,
+          },
+          Y: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 0,
+          },
+        },
+      };
+
+      const isCurrentTargetOnWalkableBlock = {
+        opcode: 'isCurrentTargetOnWalkable',
+        blockType: BlockType.BOOLEAN,
+        text: this.fm({
+          isCurrentTargetOnWalkable: `in map [MAP] walkable area?`,
+        }),
+        arguments: {
+          MAP: {
+            type: ArgumentType.STRING,
+            defaultValue: 'obstacle',
+          },
+        },
+      };
+
+      const addRectangleObstacleBlock = {
+        opcode: 'addRectangleObstacle',
+        blockType: BlockType.COMMAND,
+        text: this.fm({
+          addRectangleObstacle: `add rectangle obstacle to map [MAP] at x:[X] y:[Y] width:[WIDTH] height:[HEIGHT]`,
+        }),
+        arguments: {
+          MAP: {
+            type: ArgumentType.STRING,
+            defaultValue: 'obstacle',
+          },
+          X: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 0,
+          },
+          Y: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 0,
+          },
+          WIDTH: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 1,
+          },
+          HEIGHT: {
+            type: ArgumentType.NUMBER,
+            defaultValue: 1,
+          },
+        },
+      };
+
+      const goToBlock = {
+        opcode: 'goTo',
+        blockType: BlockType.COMMAND,
+        text: this.fm({
+          goTo: `go to :[XY]`,
+        }),
+        arguments: {
+          XY: {
+            type: ArgumentType.STRING,
+            defaultValue: '0,0',
+          },
+        },
+      };
+
+      const toggleDebugWindowBlock = {
+        blockType: BlockType.BUTTON,
+        text: this.fm({ toggleDebugWindow: 'Toggle Debug Window' }),
+        func: 'toggleDebugWindow',
+      };
+
+      const setWorkerManuallyBlock = {
+        opcode: 'setWorkerManually',
+        blockType: BlockType.COMMAND,
+        text: this.fm({
+          setWorkerManually: `set worker URL: [URL]`,
+        }),
+        arguments: {
+          URL: {
+            type: ArgumentType.STRING,
+            defaultValue: 'https://',
+          },
+        },
+      };
+
+      const div = (id, text) => {
+        const divObj = {};
+        divObj[id] = text;
+        return {
+          blockType: Scratch.BlockType.LABEL,
+          text: this.fm(divObj),
+        };
+      };
+      const documentBlock = {
+        blockType: BlockType.BUTTON,
+        text: this.fm({ document: 'Document' }),
+        func: 'openDocument',
+      };
+
+      this.__hideBlocks([
+        findPathAsyncBlock,
+        findPathBetweenSpritesAsyncBlock,
+        dispatchPathCalculatedBlock,
+        setWorkerManuallyBlock, // reserve for -6
+      ]);
+
+      return {
+        id: NS,
+        name: this.fm({ name: 'A* Odyssey' }),
+        color1: BLOCK_COLOR,
+        // menuIconURI: MENU_ICON,
+        // blockIconURI: BLOCK_ICON,
+        // ========================================================================== //
+        //     blocks
+        // eslint-disable-next-line prettier/prettier
+        blocks: [
+          documentBlock,
+          div('divSetup', 'Setup'),
+          // configAnObstacleBlock,
+          createMapBlock,
+          clearMapBlock,
+          div('divObstacle', 'Obstacle'),
+          isWalkableBlock,
+          isCurrentTargetOnWalkableBlock,
+          addRectangleObstacleBlock,
+          div('divPathFinding', 'Path Finding'),
+          fastOrAccurateBlock,
+          findPathBlock,
+          findPathBetweenSpritesBlock,
+          findPathAsyncBlock,
+          findPathBetweenSpritesAsyncBlock,
+          dispatchPathCalculatedBlock,
+          // fillPathToListBlock,
+          div('divListUtils', 'List Utils'),
+          itemOfListBlock,
+          goToBlock,
+          div('divDebug', 'Debug'),
+          toggleDebugWindowBlock,
+          drawDebugCanvasWithPathBlock,
+          setWorkerManuallyBlock,
+        ],
+        // ========================================================================== //
+        //     menus
+
+        menus: {
+          // SHOW: [
+          //   { text: this.fm({ show: 'Show' }), value: 1 },
+          //   { text: this.fm({ hide: 'Hide' }), value: 0 },
+          // ],
+          SPRITE_LIST: {
+            acceptReporters: true,
+            items: '__spriteList',
+          },
+          LIST_MENU: {
+            acceptReporters: true,
+            items: '__listList',
+          },
+          FILL_METHOD_MENU: [
+            { text: this.fm({ fillMethodSmooth: 'smooth result' }), value: 'smooth' },
+            { text: this.fm({ fillMethodRaw: 'keep raw result' }), value: 'raw' },
+          ],
+          FAST_OR_ACCURATE_MENU: [
+            { text: this.fm({ fastOrAccurateFaster: 'faster' }), value: 'faster' },
+            { text: this.fm({ fastOrAccurateAccurate: 'more accurate' }), value: 'accurate' },
+          ],
+          PATH_FINDING_MENU: [
+            { text: this.fm({ pathFindingJps: 'jps' }), value: 'jps' },
+            { text: this.fm({ pathFindingAstar: 'astar' }), value: 'astar' },
+          ],
+        },
+      };
+    }
+
+    // ========================================================================== //
+    //     helper functions | utils
+    _create_initial_grid() {
+      return new Array(CANVAS_HEIGHT).fill(null).map(() => new Array(CANVAS_WIDTH).fill(0));
+    }
+
+    _drawDebugCanvas(name) {
+      const grid = this.maps.get(name);
+      if (!grid) {
+        return;
+      }
+      const ctx = this.debugCanvas.getContext('2d');
+      ctx.clearRect(0, 0, this.debugCanvas.width, this.debugCanvas.height);
+      for (let ix = 0; ix < CANVAS_WIDTH; ix++) {
+        for (let iy = 0; iy < CANVAS_HEIGHT; iy++) {
+          const node = grid[iy][ix];
+          ctx.fillStyle = !node ? '#C1FF8F' : '#FFADAD';
+          ctx.fillRect(ix, iy, 1, 1);
+        }
+      }
+      try {
+        // Path color : #03A4FF
+        const { path } = this.lastPaths.get(name);
+        // console.info(path);
+        if (path && path.length > 0) {
+          ctx.strokeStyle = '#03A4FF';
+          ctx.beginPath();
+          ctx.moveTo(path[0][0], path[0][1]);
+          path.forEach(([p1, p2]) => {
+            // ctx.fillRect(p1, p2, 1, 1);
+            ctx.lineTo(p1, p2);
+          });
+          ctx.stroke();
+        }
+      } catch (error) {
+        // ignore, path not found
+      }
+    }
+
+    _addObstacle(name, asset, config = { scale: 1, dX: 0, dY: 0, rx: 0, ry: 0, width: 0, height: 0 }) {
+      let grid = this.maps.get(name);
+      if (!grid) {
+        // not init
+        grid = this._create_initial_grid();
+        this.maps.set(name, grid);
+      }
+      // load resource
+      return assetsHelper.decodeImage(asset).then(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const img = assetsHelper.decodeImageCache[asset.assetId];
+        const ratio = config.scale / 100.0;
+        const _w = Math.floor(config.width * ratio);
+        const _h = Math.floor(config.height * ratio);
+        const _x = Math.floor(config.dX - config.rx * ratio + canvas.width / 2);
+        const _y = Math.floor(-config.dY - config.ry * ratio + canvas.height / 2);
+        ctx.drawImage(img.bmp, _x, _y, _w, _h);
+        trace('start add obstacle', _x, _y, _w, _h);
+        let countWall = 0;
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        for (let ix = 0; ix < canvas.width; ix++) {
+          for (let iy = 0; iy < canvas.height; iy++) {
+            const pix = data.data[(ix + iy * canvas.width) * 4 + 3]; // alpha channel of pixel on (ix, iy)
+            if (pix > 128) {
+              // grid.setWalkableAt(ix, iy, false);
+              grid[iy][ix] = 1;
+              countWall++;
+            }
+          }
+        }
+        trace(`end add obstacle, wall: ${countWall}`);
+      });
+    }
+
+    _getObstacleAssets(obstacle) {
+      // const obstacle = JSON.parse(obstacleStr);
+      const sprite = this.runtime.getSpriteTargetByName(obstacle.sprite);
+      const costume = sprite?.getCostumes()[obstacle.costume];
+      if (!sprite || !costume) {
+        return { costume: null, asset: null, config: null };
+      }
+      return {
+        costume,
+        asset: costume.asset,
+        config: {
+          scale: obstacle.scale / costume.bitmapResolution,
+          dX: obstacle.dX,
+          dY: obstacle.dY,
+          rx: costume.rotationCenterX,
+          ry: costume.rotationCenterY,
+          width: costume.size[0],
+          height: costume.size[1],
+        },
+      };
+    }
+
+    _transPathToScratch(path) {
+      if (path && path.length >= 0) {
+        const rt = [];
+        path.forEach(([x, y]) => {
+          rt.push([Math.floor(x - CANVAS_WIDTH / 2), Math.floor(-y + CANVAS_HEIGHT / 2)]);
+        });
+        return rt;
+      }
+      return path;
+    }
+
+    _getWorker = (workerUrl) => {
+      let worker;
+      try {
+        worker = this.workers[workerUrl];
+        // console.log("get worker", workerUrl, worker)
+        if (worker) {
+          return worker;
+        }
+        worker = new WorkerQueue(workerUrl);
+        this.workers[workerUrl] = worker;
+      } catch (e) {
+        try {
+          let blob;
+          try {
+            blob = new Blob([`importScripts('${workerUrl}');`], { type: 'application/javascript' });
+          } catch (e1) {
+            const blobBuilder = new (window.BlobBuilder || window.WebKitBlobBuilder || window.MozBlobBuilder)();
+            blobBuilder.append(`importScripts('${workerUrl}');`);
+            blob = blobBuilder.getBlob('application/javascript');
+          }
+          const url = window.URL || window.webkitURL;
+          const blobUrl = url.createObjectURL(blob);
+          worker = new WorkerQueue(blobUrl);
+          this.workers[workerUrl] = worker;
+        } catch (e2) {
+          // if it still fails, there is nothing much we can do
+        }
+      }
+      return worker;
+    };
+
+    // ========================================================================== //
+    //     functions
+
+    async createMap(args) {
+      const name = Cast.toString(args.NAME);
+      const { SPRITE, COSTUME, DX, DY, SCALE } = args;
+      const sprite = this.runtime.getSpriteTargetByName(SPRITE);
+      const costumeNameOrNumber = Cast.toString(COSTUME);
+
+      let costumeIdx = sprite.getCostumeIndexByName(costumeNameOrNumber);
+      if (costumeIdx === -1) {
+        costumeIdx = Cast.toNumber(COSTUME) - 1;
+      }
+      const costume =
+        costumeIdx >= 0 ? sprite.getCostumes()[costumeIdx] : sprite.getCostumes()[Cast.toNumber(costumeNameOrNumber) - 1];
+      if (!costume) {
+        warn('[createMap]', 'costume not found', costumeNameOrNumber);
+        return;
+      }
+      const options = {
+        sprite: SPRITE,
+        costume: costumeIdx,
+        dX: Cast.toNumber(DX),
+        dY: Cast.toNumber(DY),
+        scale: Cast.toNumber(SCALE),
+      };
+      // const obstacleStr = Cast.toString(args.OBSTACLE);
+      const { asset, config } = this._getObstacleAssets(options);
+      if (asset) {
+        await this._addObstacle(name, asset, config);
+      }
+    }
+
+    async findPath(args, util) {
+      const map = Cast.toString(args.MAP);
+      const startX = Cast.toNumber(args.SX);
+      const startY = Cast.toNumber(args.SY);
+      const endX = Cast.toNumber(args.EX);
+      const endY = Cast.toNumber(args.EY);
+      const list = Cast.toString(args.LIST);
+      const fillMethodSmooth = Cast.toString(args.METHOD) === 'smooth';
+
+      // const finder = new AStarFinder({ allowDiagonal: true, dontCrossCorners: true });
+      // const finder = new AStarFinder({ allowDiagonal: true, dontCrossCorners: true, weight: 100 });
+      let grid = this.maps.get(map);
+      if (!grid) {
+        grid = this._create_initial_grid();
+      }
+      // const gridBackup = grid.clone();
+
+      // change scratch position to grid position
+      let sx = Math.floor(CANVAS_WIDTH / 2 + startX);
+      let sy = Math.floor(-startY + CANVAS_HEIGHT / 2);
+
+      let ex = Math.floor(endX + CANVAS_WIDTH / 2);
+      let ey = Math.floor(-endY + CANVAS_HEIGHT / 2);
+
+      sx = Math.min(Math.max(sx, 0), CANVAS_WIDTH - 1);
+      sy = Math.min(Math.max(sy, 0), CANVAS_HEIGHT - 1);
+      ex = Math.min(Math.max(ex, 0), CANVAS_WIDTH - 1);
+      ey = Math.min(Math.max(ey, 0), CANVAS_HEIGHT - 1);
+
+      // trace('start find path', sx, sy, ex, ey, args);
+      const me = this;
+      const findPromise = (util, me) => {
+        const points = [sx, sy, ex, ey];
+        return new Promise((resolve) => {
+          // direct resolve if start and end are the same or on the not walkable area
+          if (grid[sy][sx] === 1 || grid[ey][ex] === 1 || (sx === ex && sy === ey)) {
+            resolve({ path: [], smoothPath: [], targetId: util.target.id, me, util });
+            return;
+          }
+
+          let workerUrl = this.pathFindingAlg === 'jps' ? this.jpsWorkerUrl : this.astarWorkerUrl;
+          // debugger;
+          if (this.workerURL) {
+            workerUrl = this.workerURL;
+          }
+          const worker = this._getWorker(workerUrl);
+          const wasmUrl = jpsWasm;
+          worker
+            .submit({
+              points,
+              grid,
+              targetId: util.target.id,
+              weight: this.weight,
+              wasmUrl,
+            })
+            .then(function (msg) {
+              // console.log('worker size', worker.pool.length)
+              const { path, smoothPath, targetId } = msg;
+              // console.log('Work done', path, smoothPath);
+              // trace('worker calculated');
+              // const target = this.runtime.getTargetById(targetId);
+              // me.__dispatchCCWEvent('dispatchPathCalculated', {}, { targetId }, myUtil);
+              // worker.terminate();
+              resolve({ path, smoothPath, targetId, me, util });
+            });
+        });
+      };
+      await findPromise(util, me).then(({ path, smoothPath, targetId }) => {
+        // trace('find promise resolved');
+        const pathTrans = this._transPathToScratch(smoothPath);
+        const rawPathTrans = this._transPathToScratch(path);
+        this.lastPaths.set(map, { path: smoothPath, pathTrans });
+        const calculateTarget = this.runtime.getTargetById(targetId);
+        this.__fillArrayToList(fillMethodSmooth ? pathTrans : rawPathTrans, list, { overwrite: true }, calculateTarget);
+      });
+      // trace('end find path');
+    }
+
+    findPathAsync(args, util) {
+      this.findPath(args, util);
+    }
+
+    async findPathBetweenSprites(args, util) {
+      const start = Cast.toString(args.START);
+      const end = Cast.toString(args.END);
+      const startTarget = this.__getSpriteTargetByNameOrId(start);
+      const endTarget = this.__getSpriteTargetByNameOrId(end);
+      if (!startTarget || !endTarget) {
+        warn('[findPathBetweenSprites]', 'start or end target is not found');
+        return;
+      }
+      await this.findPath(
+        {
+          ...args,
+          SX: startTarget.x,
+          SY: startTarget.y,
+          EX: endTarget.x,
+          EY: endTarget.y,
+        },
+        util
+      );
+    }
+
+    findPathBetweenSpritesAsync(args, util) {
+      this.findPathBetweenSprites(args, util);
+    }
+
+    drawDebugCanvasWithPath(args) {
+      if (this.showDebugWindow) {
+        const map = Cast.toString(args.MAP);
+        this._drawDebugCanvas(map);
+      }
+    }
+
+    clearMap(args) {
+      const map = Cast.toString(args.NAME);
+      const grid = this.maps.get(map);
+      if (!grid) {
+        warn('[clearMap]', 'map not found', map);
+        return;
+      }
+      const x = Cast.toNumber(args.X);
+      const y = Cast.toNumber(args.Y);
+      const w = Cast.toNumber(args.WIDTH);
+      const h = Cast.toNumber(args.HEIGHT);
+
+      const sx = Math.floor(x + CANVAS_WIDTH / 2);
+      const sy = Math.floor(-y + CANVAS_HEIGHT / 2);
+
+      // console.info('start clear map', sx, sy, w, h);
+      for (let ix = sx; ix < w + sx; ix++) {
+        for (let iy = sy; iy < h + sy; iy++) {
+          if (ix >= CANVAS_WIDTH || iy >= CANVAS_HEIGHT || ix < 0 || iy < 0) {
+            // overflow, ignore
+          } else {
+            // grid.setWalkableAt(ix, iy, true);
+            grid[iy][ix] = 0;
+          }
+        }
+      }
+      // this.maps.set(map, grid);
+    }
+
+    fillPathToList(args, util) {
+      if (args.LIST === 'empty') {
+        return;
+      }
+      const map = Cast.toString(args.MAP);
+      const { pathTrans } = this.lastPaths.get(map);
+      if (pathTrans === undefined || pathTrans.length === 0) {
+        return;
+      }
+      this.__fillArrayToList(pathTrans, Cast.toString(args.LIST), { overwrite: true }, util.target);
+    }
+
+    itemOfList(args, util) {
+      // debugger;
+      const list = this.__findList(Cast.toString(args.LIST), util.target);
+      if (!list) {
+        // Not found
+        return 0;
+      }
+      const index = Cast.toNumber(args.INDEX) - 1;
+      const innerIndex = Cast.toNumber(args.IDX) - 1;
+      if (index >= list.value.length || index < 0) {
+        return 0;
+      }
+      if (innerIndex !== 0 && innerIndex !== 1) {
+        return 0;
+      }
+      const item = list.value[index];
+      // eslint-disable-next-line no-useless-escape
+      const xy = Cast.toString(item).replace(/[\[\]\(\)]/gm, '');
+      const rt = xy.split(',');
+      // console.info('itemOfList', item);
+      return rt[innerIndex];
+    }
+
+    isWalkable(args) {
+      const map = Cast.toString(args.MAP);
+      const x = Cast.toNumber(args.X);
+      const y = Cast.toNumber(args.Y);
+
+      const grid = this.maps.get(map);
+      if (!grid) {
+        warn('[isWalkable]', 'map not found', map);
+        return false;
+      }
+      const sx = Math.floor(x + CANVAS_WIDTH / 2);
+      const sy = Math.floor(-y + CANVAS_HEIGHT / 2);
+      if (sx >= CANVAS_WIDTH || sy >= CANVAS_HEIGHT || sx < 0 || sy < 0) {
+        return false;
+      }
+      return grid[sy][sx] === 0;
+    }
+
+    isCurrentTargetOnWalkable(args, utils) {
+      return this.isWalkable({ ...args, X: utils.target.x, Y: utils.target.y });
+    }
+
+    goTo(args, util) {
+      // eslint-disable-next-line no-useless-escape
+      const xy = Cast.toString(args.XY).replace(/[\[\]\(\)]/gm, '');
+      const [x, y] = xy.split(',');
+      const sx = Cast.toNumber(x) || 0;
+      const sy = Cast.toNumber(y) || 0;
+      util.target.setXY(sx, sy, true);
+    }
+
+    fastOrAccurate(args) {
+      const accurate = Cast.toString(args.ALGORITHM) === 'accurate';
+      // compatible
+      const pathFindingAlg = args.PATH_FINDING ? Cast.toString(args.PATH_FINDING) : 'jps';
+      this.weight = accurate ? 1 : 60;
+      this.pathFindingAlg = pathFindingAlg;
+    }
+
+    addRectangleObstacle(args) {
+      const map = Cast.toString(args.MAP);
+      const x = Cast.toNumber(args.X);
+      const y = Cast.toNumber(args.Y);
+      const w = Cast.toNumber(args.WIDTH);
+      const h = Cast.toNumber(args.HEIGHT);
+      let grid = this.maps.get(map);
+      if (!grid) {
+        grid = this._create_initial_grid();
+        this.maps.set(map, grid);
+      }
+      const sx = Math.floor(x + CANVAS_WIDTH / 2);
+      const sy = Math.floor(-y + CANVAS_HEIGHT / 2);
+      for (let ix = sx; ix < w + sx; ix++) {
+        for (let iy = sy; iy < h + sy; iy++) {
+          if (ix >= CANVAS_WIDTH || iy >= CANVAS_HEIGHT || ix < 0 || iy < 0) {
+            // overflow, ignore
+          } else {
+            grid[iy][ix] = 1;
+          }
+        }
+      }
+    }
+
+    openDocument() {
+      const url = this.fm({ documentURL: 'https://getgandi.com/extensions/odyssey' });
+      window.open(url, '_blank');
+    }
+
+    toggleDebugWindow() {
+      this.showDebugWindow = !this.showDebugWindow;
+      this.debugContainer.style.display = this.showDebugWindow ? 'block' : 'none';
+    }
+
+    setWorkerManually(args) {
+      const url = Cast.toString(args.URL);
+      if (url && url.startsWith('http')) {
+        this.workerURL = url;
+      } else {
+        this.workerURL = undefined;
+      }
     }
   }
 
-  Scratch.extensions.register(new Extension());
+  Scratch.extensions.register(new GandiAStar(Scratch.vm.runtime));
 })(Scratch);
