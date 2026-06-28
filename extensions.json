@@ -1,6 +1,28 @@
 {
     "extensions": [
         {
+            "slug": "cbeg",
+            "id": "cbeg",
+            "name": "CB Extension Gallery",
+            "description": "A lightweight tool to build Scratch extensions and open the CB Extension Gallery.",
+            "nameTranslations": {
+                "zh-cn": "CB Extension Gallery",
+                "en": "CB Extension Gallery"
+            },
+            "descriptionTranslations": {
+                "zh-cn": "一个轻量的 Scratch 扩展制作工具，并可直接打开 CB Extension Gallery。",
+                "en": "A lightweight tool to build Scratch extensions and open the CB Extension Gallery."
+            },
+            "image": "cbeg.png",
+            "by": [
+                {
+                    "name": "ChessBrainIsNotHuman",
+                    "link": "https://chessbrain.qzz.io/"
+                }
+            ],
+            "docs": false
+        },
+        {
             "slug": "kylin",
             "id": "kylin",
             "name": "kylin",
@@ -867,6 +889,28 @@
                 {
                 "name": "yuan",
                 "link": "https://www.ccw.site/student/687f6ba9fc898317568cdc8d"
+                }
+            ],
+            "scratchCompatible": false,
+            "docs": false
+        },
+        {
+            "slug": "mdui",
+            "id": "mdui",
+            "name": "mdui弹窗",
+            "description": "A dialog and snackbar extension based on mdui for building interactive UI in projects.",
+            "nameTranslations": {
+                "zh-cn": "mdui弹窗",
+                "en": "mdui Dialog"
+            },
+            "descriptionTranslations": {
+                "zh-cn": "基于 mdui 的弹窗与消息提示扩展，可用于在作品中构建交互式界面。",
+                "en": "A dialog and snackbar extension based on mdui for building interactive UI in projects."
+            },
+            "image": "mdui.jpeg",
+            "by": [
+                {
+                    "name": "不想上学"
                 }
             ],
             "scratchCompatible": false,
