@@ -48,14 +48,13 @@
         },
         {
             "slug": "transformers",
-            "id": "transformers",
-            "name": "Transformers",
-            "description": "Transformers.js for scratch.Based on huggingface transformers.js.",
-            "image": "transformers.png",
+            "id": "huggingfacetransformers",
+            "name": "Hugging Face Transformers",
+            "description": "Run Hugging Face Transformers.js models in TurboWarp with configurable tasks, devices, and dtypes.",
+            "image": "transformers.svg",
             "by": [
                 {
-                    "name": "PPN-design",
-                    "link": "https://github.com/DDguan2010"
+                    "name": "0.2Studio"
                 }
             ],
             "docs": false

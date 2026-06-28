@@ -1,811 +1,2307 @@
-// Transformers.js Turbowarp扩展
-// 版本: 1.0.0
-// 使用 Hugging Face Transformers.js 3.8.1
+// Name: Hugging Face Transformers
+// ID: huggingfacetransformers
+// Description: Run Hugging Face Transformers.js models in TurboWarp with configurable tasks, devices, and dtypes.
+// By: 0.2Studio
+// License: MPL-2.0
+// Context: "Hugging Face" and "Transformers.js" are brand names. Model IDs, task IDs, device IDs, and dtypes such as q4f16 should not be translated.
 
-(function(ext) {
-    // 清理函数，用于扩展卸载
-    ext._shutdown = function() {};
-    
-    // 扩展状态报告
-    ext._getStatus = function() {
-        return { status: 2, msg: 'Ready' };
+(function (Scratch) {
+  "use strict";
+
+  if (!Scratch.extensions.unsandboxed) {
+    throw new Error("Hugging Face Transformers must run unsandboxed");
+  }
+
+  const MODULE_URL =
+    "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0/dist/transformers.min.js";
+  const EXTENSION_VERSION = "2.0.0";
+  const LIBRARY_VERSION = "4.2.0";
+  const DOCS_URI =
+    "https://extensions.turbowarp.org/huggingface-transformers";
+  const DEFAULT_MODEL_OPTIONS = '{"device":"auto","dtype":"auto"}';
+  const EMPTY_JSON_OBJECT = "{}";
+
+  const DEFAULT_SENTIMENT_MODEL =
+    "Xenova/distilbert-base-uncased-finetuned-sst-2-english";
+  const DEFAULT_QA_MODEL = "Xenova/distilbert-base-cased-distilled-squad";
+  const DEFAULT_GENERATION_MODEL = "onnx-community/SmolLM-135M-Instruct-ONNX";
+  const DEFAULT_TRANSLATION_MODEL = "Xenova/t5-small";
+  const DEFAULT_TRANSLATION_MODEL_OPTIONS = '{"device":"auto","dtype":"fp32"}';
+  const DEFAULT_SUMMARIZATION_MODEL = "Xenova/distilbart-cnn-6-6";
+  const DEFAULT_ZERO_SHOT_MODEL = "Xenova/distilbert-base-uncased-mnli";
+  const DEFAULT_FILL_MASK_MODEL = "onnx-community/ettin-encoder-32m-ONNX";
+  const DEFAULT_NER_MODEL = "Xenova/bert-base-multilingual-cased-ner-hrl";
+  const DEFAULT_GENERIC_MODEL = "Xenova/bert-base-uncased";
+  const DEFAULT_PROCESSOR_MODEL = "Xenova/clip-vit-base-patch16";
+  const DEFAULT_GENERATION_MODEL_OPTIONS = '{"device":"auto","dtype":"q4"}';
+  const DEFAULT_FILL_MASK_MODEL_OPTIONS = '{"device":"auto","dtype":"fp32"}';
+
+  const SOURCE_TRANSLATIONS = {
+    "zh-cn": {
+      "_Candidate labels must be a JSON array or a comma-separated list.": "候选标签必须是 JSON 数组或逗号分隔列表。",
+      "_Downloading {file} for {name}.": "正在为 {name} 下载 {file}。",
+      "_Error: {message}": "错误：{message}",
+      "_Finished loading {file} for {name}.": "已为 {name} 完成加载 {file}。",
+      "_Hugging Face Transformers": "Hugging Face Transformers",
+      "_Loading Transformers.js module...": "正在加载 Transformers.js 模块...",
+      "_Loading {name}: {progress}%": "正在加载 {name}：{progress}%",
+      "_Model": "模型",
+      "_Model inputs must be a JSON object.": "模型输入必须是 JSON 对象。",
+      "_Permission to fetch {url} was denied.": "没有权限获取 {url}。",
+      "_Pipeline": "流水线",
+      "_Preparing {file} for {name}.": "正在为 {name} 准备 {file}。",
+      "_Processor": "处理器",
+      "_Ready: {name}": "就绪：{name}",
+      "_Retrying {name} (attempt {attempt})": "正在重试 {name}（第 {attempt} 次）",
+      "_Tokenizer": "分词器",
+      "_Transformers status": "Transformers 状态",
+      "_Transformers.js has not been loaded yet.": "Transformers.js 尚未加载。",
+      "_Transformers.js loaded, but the expected APIs were not found.": "Transformers.js 已加载，但没有找到预期的 API。",
+      "_Transformers.js {libraryVersion} / extension {extensionVersion}": "Transformers.js {libraryVersion} / 扩展 {extensionVersion}",
+      "_Transformers.js {version} ready.": "Transformers.js {version} 已就绪。",
+      "_WebGPU supported?": "支持 WebGPU？",
+      "_{label} looks like JSON but could not be parsed.": "{label} 看起来像 JSON，但无法解析。",
+      "_{label} must be a JSON object.": "{label} 必须是 JSON 对象。",
+      "_{label} must be a valid JSON object.": "{label} 必须是有效的 JSON 对象。",
+      "_{label} not found.": "未找到 {label}。",
+      "_{label} released.": "已释放 {label}。",
+      "_audio classification": "音频分类",
+      "_auto": "自动",
+      "_automatic speech recognition": "自动语音识别",
+      "_available dtypes for model [MODEL] options [OPTIONS]": "模型 [MODEL] 在选项 [OPTIONS] 下可用的数据类型",
+      "_cpu": "CPU",
+      "_feature extraction": "特征提取",
+      "_fill mask": "填空预测",
+      "_fill mask model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "填空模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_generation options": "生成选项",
+      "_gpu": "GPU",
+      "_image classification": "图像分类",
+      "_image segmentation": "图像分割",
+      "_image to text": "图像转文本",
+      "_input": "输入",
+      "_inputs": "输入数据",
+      "_last loading progress": "上一次加载进度",
+      "_library version": "库版本",
+      "_load model [ID] model [MODEL] options [OPTIONS]": "加载模型 [ID] 模型 [MODEL] 选项 [OPTIONS]",
+      "_load pipeline [ID] task [TASK] model [MODEL] options [OPTIONS]": "加载流水线 [ID] 任务 [TASK] 模型 [MODEL] 选项 [OPTIONS]",
+      "_load processor [ID] model [MODEL] options [OPTIONS]": "加载处理器 [ID] 模型 [MODEL] 选项 [OPTIONS]",
+      "_load tokenizer [ID] model [MODEL] options [OPTIONS]": "加载分词器 [ID] 模型 [MODEL] 选项 [OPTIONS]",
+      "_model options": "模型选项",
+      "_named entity recognition": "命名实体识别",
+      "_named entity recognition model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "命名实体识别模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_object detection": "目标检测",
+      "_processor [ID] run [INPUT]": "处理器 [ID] 运行 [INPUT]",
+      "_processor options": "处理器选项",
+      "_question answering": "问答",
+      "_question answering model [MODEL] question [QUESTION] context [CONTEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "问答模型 [MODEL] 问题 [QUESTION] 上下文 [CONTEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_registry options": "注册表选项",
+      "_release all resources": "释放全部资源",
+      "_release model [ID]": "释放模型 [ID]",
+      "_release pipeline [ID]": "释放流水线 [ID]",
+      "_release processor [ID]": "释放处理器 [ID]",
+      "_release tokenizer [ID]": "释放分词器 [ID]",
+      "_run model [ID] inputs [INPUTS]": "运行模型 [ID] 输入 [INPUTS]",
+      "_run options": "运行选项",
+      "_run pipeline [ID] input [INPUT] options [OPTIONS]": "运行流水线 [ID] 输入 [INPUT] 选项 [OPTIONS]",
+      "_sentiment analysis": "情感分析",
+      "_sentiment analysis model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "情感分析模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_summarization": "摘要",
+      "_summarization model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "摘要模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_text classification": "文本分类",
+      "_text classification model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "文本分类模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_text generation": "文本生成",
+      "_text generation model [MODEL] input [INPUT] model options [MODEL_OPTIONS] generate options [GENERATE_OPTIONS]": "文本生成模型 [MODEL] 输入 [INPUT] 模型选项 [MODEL_OPTIONS] 生成选项 [GENERATE_OPTIONS]",
+      "_text to audio": "文本转音频",
+      "_text to text generation": "文本到文本生成",
+      "_token IDs": "标记 ID",
+      "_token classification": "词元分类",
+      "_tokenizer [ID] decode [TOKENS]": "分词器 [ID] 解码 [TOKENS]",
+      "_tokenizer [ID] encode [INPUT]": "分词器 [ID] 编码 [INPUT]",
+      "_tokenizer options": "分词器选项",
+      "_translation": "翻译",
+      "_translation model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "翻译模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_wasm": "WASM",
+      "_webgpu": "WebGPU",
+      "_webnn": "WebNN",
+      "_webnn cpu": "WebNN CPU",
+      "_webnn gpu": "WebNN GPU",
+      "_webnn npu": "WebNN NPU",
+      "_zero shot classification model [MODEL] text [TEXT] labels [LABELS] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "零样本文本分类模型 [MODEL] 文本 [TEXT] 标签 [LABELS] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_zero-shot classification": "零样本文本分类",
+      "_advanced: available dtypes for model [MODEL] options [OPTIONS]": "高级：模型 [MODEL] 在选项 [OPTIONS] 下可用的数据类型",
+      "_advanced: fill mask model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "高级：填空模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_advanced: load model [ID] model [MODEL] options [OPTIONS]": "高级：加载模型 [ID] 模型 [MODEL] 选项 [OPTIONS]",
+      "_advanced: load pipeline [ID] task [TASK] model [MODEL] options [OPTIONS]": "高级：加载流水线 [ID] 任务 [TASK] 模型 [MODEL] 选项 [OPTIONS]",
+      "_advanced: load processor [ID] model [MODEL] options [OPTIONS]": "高级：加载处理器 [ID] 模型 [MODEL] 选项 [OPTIONS]",
+      "_advanced: load tokenizer [ID] model [MODEL] options [OPTIONS]": "高级：加载分词器 [ID] 模型 [MODEL] 选项 [OPTIONS]",
+      "_advanced: named entity recognition model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "高级：命名实体识别模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_advanced: processor [ID] run [INPUT]": "高级：处理器 [ID] 运行 [INPUT]",
+      "_advanced: question answering model [MODEL] question [QUESTION] context [CONTEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "高级：问答模型 [MODEL] 问题 [QUESTION] 上下文 [CONTEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_advanced: release all resources": "高级：释放全部资源",
+      "_advanced: release model [ID]": "高级：释放模型 [ID]",
+      "_advanced: release pipeline [ID]": "高级：释放流水线 [ID]",
+      "_advanced: release processor [ID]": "高级：释放处理器 [ID]",
+      "_advanced: release tokenizer [ID]": "高级：释放分词器 [ID]",
+      "_advanced: run model [ID] inputs [INPUTS]": "高级：运行模型 [ID] 输入 [INPUTS]",
+      "_advanced: run pipeline [ID] input [INPUT] options [OPTIONS]": "高级：运行流水线 [ID] 输入 [INPUT] 选项 [OPTIONS]",
+      "_advanced: sentiment analysis model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "高级：情感分析模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_advanced: summarization model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "高级：摘要模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_advanced: text classification model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "高级：文本分类模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_advanced: text generation model [MODEL] input [INPUT] model options [MODEL_OPTIONS] generate options [GENERATE_OPTIONS]": "高级：文本生成模型 [MODEL] 输入 [INPUT] 模型选项 [MODEL_OPTIONS] 生成选项 [GENERATE_OPTIONS]",
+      "_advanced: tokenizer [ID] decode [TOKENS]": "高级：分词器 [ID] 解码 [TOKENS]",
+      "_advanced: tokenizer [ID] encode [INPUT]": "高级：分词器 [ID] 编码 [INPUT]",
+      "_advanced: translation model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "高级：翻译模型 [MODEL] 文本 [TEXT] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_advanced: zero shot classification model [MODEL] text [TEXT] labels [LABELS] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]": "高级：零样本文本分类模型 [MODEL] 文本 [TEXT] 标签 [LABELS] 模型选项 [MODEL_OPTIONS] 运行选项 [RUN_OPTIONS]",
+      "_analyze sentiment of [TEXT]": "分析 [TEXT] 的情感",
+      "_answer [QUESTION] from [CONTEXT]": "从 [CONTEXT] 中回答 [QUESTION]",
+      "_bnb4": "bnb4",
+      "_classify [TEXT] with labels [LABELS]": "用标签 [LABELS] 分类 [TEXT]",
+      "_fill the blank in [TEXT]": "填补 [TEXT] 中的空白",
+      "_find named entities in [TEXT]": "在 [TEXT] 中查找命名实体",
+      "_fp16": "fp16",
+      "_fp32": "fp32",
+      "_generate text from [INPUT]": "从 [INPUT] 生成文本",
+      "_int8": "int8",
+      "_q1": "q1",
+      "_q1f16": "q1f16",
+      "_q2": "q2",
+      "_q2f16": "q2f16",
+      "_q4": "q4",
+      "_q4f16": "q4f16",
+      "_q8": "q8",
+      "_summarize [TEXT]": "总结 [TEXT]",
+      "_translate [TEXT]": "翻译 [TEXT]",
+      "_uint8": "uint8"
+    }
+  };
+
+  if (Scratch.translate && Scratch.translate.setup) {
+    // Raw source imports do not get the gallery build's injected translations.
+    // eslint-disable-next-line extension/no-translate-setup
+    Scratch.translate.setup(SOURCE_TRANSLATIONS);
+  }
+
+  const stores = {
+    pipelines: new Map(),
+    models: new Map(),
+    tokenizers: new Map(),
+    processors: new Map(),
+  };
+
+  const counters = {
+    pipeline: 1,
+    model: 1,
+    tokenizer: 1,
+    processor: 1,
+  };
+
+  let transformersModulePromise = null;
+  let transformersModule = null;
+  let lastErrorMessage = "";
+  let lastProgressInfo = null;
+
+  function setLastError(message) {
+    lastErrorMessage = Scratch.Cast.toString(message || "");
+  }
+
+  function clearLastError() {
+    lastErrorMessage = "";
+  }
+
+  function setLastProgress(info) {
+    lastProgressInfo = info;
+  }
+
+  function errorMessage(error) {
+    return error && error.message
+      ? error.message
+      : Scratch.Cast.toString(error);
+  }
+
+  function shouldRetryLoadError(error) {
+    const message = errorMessage(error).toLowerCase();
+    return (
+      message.includes("network error") ||
+      message.includes("failed to fetch") ||
+      message.includes("load failed") ||
+      message.includes("fetch failed")
+    );
+  }
+
+  async function withRetry(load, label) {
+    let lastError;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        return await load();
+      } catch (error) {
+        lastError = error;
+        if (attempt >= 4 || !shouldRetryLoadError(error)) {
+          throw error;
+        }
+        setLastProgress({
+          context: "retry",
+          name: label,
+          info: {
+            status: "retrying",
+            attempt: attempt + 1,
+            error: errorMessage(error),
+          },
+          timestamp: Date.now(),
+        });
+      }
+    }
+    throw lastError;
+  }
+
+  function stringifyJSON(value) {
+    return JSON.stringify(serializeValue(value), null, 2);
+  }
+
+  function serializeValue(value, seen) {
+    const activeSeen = seen || new WeakSet();
+
+    if (value === null || value === undefined) {
+      return value;
+    }
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      return value;
+    }
+    if (typeof value === "bigint") {
+      return value.toString();
+    }
+    if (typeof value === "function") {
+      return "[Function]";
+    }
+    if (value instanceof Error) {
+      return {
+        name: value.name,
+        message: value.message,
+      };
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => serializeValue(item, activeSeen));
+    }
+    if (ArrayBuffer.isView(value)) {
+      return serializeTypedArray(value);
+    }
+    if (value instanceof ArrayBuffer) {
+      return {
+        type: "ArrayBuffer",
+        byteLength: value.byteLength,
+      };
+    }
+    if (value instanceof URL) {
+      return value.toString();
+    }
+    if (typeof value.tolist === "function") {
+      return serializeTensorLike(value, activeSeen);
+    }
+    if (typeof value === "object") {
+      if (activeSeen.has(value)) {
+        return "[Circular]";
+      }
+      activeSeen.add(value);
+
+      if (value instanceof Map) {
+        const mapObject = {};
+        for (const [key, entryValue] of value.entries()) {
+          mapObject[key] = serializeValue(entryValue, activeSeen);
+        }
+        return mapObject;
+      }
+
+      const output = {};
+      for (const [key, entryValue] of Object.entries(value)) {
+        output[key] = serializeValue(entryValue, activeSeen);
+      }
+      return output;
+    }
+
+    return Scratch.Cast.toString(value);
+  }
+
+  function serializeTypedArray(array) {
+    const previewLength = Math.min(array.length, 32);
+    return {
+      type: array.constructor.name,
+      length: array.length,
+      preview: Array.from(array.slice(0, previewLength), (item) =>
+        typeof item === "bigint" ? item.toString() : item
+      ),
+      truncated: array.length > previewLength,
     };
-    
-    // ==================== 全局变量定义 ====================
-    
-    // Transformers.js库引用
-    let transformers = null;
-    let isTransformersLoaded = false;
-    let loadError = null;
-    
-    // Pipeline存储（Pipeline ID到Pipeline对象的映射）
-    let pipelines = {};
-    let nextPipelineId = 1;
-    
-    // 模型存储（模型ID到模型对象的映射）
-    let models = {};
-    let nextModelId = 1;
-    
-    // 分词器存储（分词器ID到分词器对象的映射）
-    let tokenizers = {};
-    let nextTokenizerId = 1;
-    
-    // 处理器存储（处理器ID到处理器对象的映射）
-    let processors = {};
-    let nextProcessorId = 1;
-    
-    // ==================== Transformers.js加载函数 ====================
-    
-    /**
-     * 安全的JSON序列化函数，处理BigInt等特殊类型
-     * @param {any} value - 要序列化的值
-     * @param {number|string} space - 缩进空格数
-     * @returns {string} JSON字符串
-     */
-    function safeStringify(value, space = 2) {
-        return JSON.stringify(value, (key, val) => {
-            if (typeof val === 'bigint') {
-                return val.toString(); // 将BigInt转换为字符串
-            }
-            return val; // 其他类型保持不变
-        }, space);
+  }
+
+  function serializeTensorLike(tensor, seen) {
+    const serialized = {
+      type: "Tensor",
+      dtype: tensor.type || null,
+      dims: Array.isArray(tensor.dims) ? tensor.dims.slice() : null,
+      size: typeof tensor.size === "number" ? tensor.size : null,
+    };
+
+    try {
+      serialized.value = serializeLargeArray(tensor.tolist(), seen || new WeakSet());
+    } catch (_error) {
+      serialized.value = "[Tensor data omitted]";
     }
-    
-    /**
-     * 确保Transformers.js库已加载
-     * @returns {Promise<object>} Transformers.js库对象
-     */
-    async function ensureTransformersLoaded() {
-        if (isTransformersLoaded) {
-            return transformers;
-        }
-        
-        if (loadError) {
-            throw loadError;
-        }
-        
-        try {
-            console.log('开始加载Transformers.js v3.8.1...');
-            
-            // 使用ES模块动态导入Transformers.js
-            // Transformers.js 3.8.1 应该通过ES模块导入
-            const module = await import('https://extensions.02engine.02studio.xyz/attachment/transformers.js');
-            
-            // 检查关键API是否可用
-            if (!module.pipeline) {
-                throw new Error('Transformers.js加载成功，但pipeline API未找到');
-            }
-            
-            // 设置transformers对象，包含所有需要的API
-            transformers = {
-                pipeline: module.pipeline,
-                env: module.env,
-                AutoModel: module.AutoModel,
-                AutoTokenizer: module.AutoTokenizer,
-                AutoProcessor: module.AutoProcessor,
-                // 其他可能的API
-                AutoModelForSequenceClassification: module.AutoModelForSequenceClassification,
-                AutoModelForQuestionAnswering: module.AutoModelForQuestionAnswering,
-                AutoModelForCausalLM: module.AutoModelForCausalLM,
-                AutoModelForSeq2SeqLM: module.AutoModelForSeq2SeqLM,
-                AutoModelForTokenClassification: module.AutoModelForTokenClassification,
-                AutoModelForMaskedLM: module.AutoModelForMaskedLM,
-                // 工具函数
-                tensor: module.tensor,
-                // 其他工具...
-            };
-            
-            isTransformersLoaded = true;
-            console.log('Transformers.js v3.8.1 加载成功');
-            return transformers;
-        } catch (error) {
-            loadError = error;
-            console.error('加载Transformers.js失败:', error);
-            
-            // 提供更详细的错误信息
-            if (error.toString().includes('Failed to fetch')) {
-                loadError = new Error('无法加载Transformers.js，请检查网络连接。错误: ' + error.message);
-            } else if (error.toString().includes('Unexpected token')) {
-                loadError = new Error('Transformers.js模块格式可能不正确，请确保使用正确的CDN链接。错误: ' + error.message);
-            }
-            
-            throw loadError;
-        }
+
+    return serialized;
+  }
+
+  function serializeLargeArray(value, seen) {
+    if (!Array.isArray(value)) {
+      return serializeValue(value, seen);
     }
-    
-    // ==================== 扩展描述符 ====================
-    
-    const descriptor = {
+
+    const previewLength = Math.min(value.length, 12);
+    const preview = [];
+    for (let i = 0; i < previewLength; i++) {
+      preview.push(serializeLargeArray(value[i], seen));
+    }
+
+    if (value.length <= previewLength) {
+      return preview;
+    }
+
+    return {
+      preview,
+      length: value.length,
+      truncated: true,
+    };
+  }
+
+  function parseJSONObject(text, label) {
+    const raw = Scratch.Cast.toString(text).trim();
+    if (!raw) {
+      return {};
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (_error) {
+      throw new Error(
+        Scratch.translate("{label} must be a valid JSON object.", {
+          label,
+        })
+      );
+    }
+
+    if (!isPlainObject(parsed)) {
+      throw new Error(
+        Scratch.translate("{label} must be a JSON object.", {
+          label,
+        })
+      );
+    }
+
+    return parsed;
+  }
+
+  function isPlainObject(value) {
+    return !!value && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function looksStructured(text) {
+    return (
+      text.startsWith("{") ||
+      text.startsWith("[") ||
+      text.startsWith('"') ||
+      text === "true" ||
+      text === "false" ||
+      text === "null" ||
+      /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(text)
+    );
+  }
+
+  function parseMaybeStructuredInput(text, label) {
+    const raw = Scratch.Cast.toString(text).trim();
+    if (!raw) {
+      return "";
+    }
+    if (!looksStructured(raw)) {
+      return Scratch.Cast.toString(text);
+    }
+
+    try {
+      return JSON.parse(raw);
+    } catch (_error) {
+      throw new Error(
+        Scratch.translate("{label} looks like JSON but could not be parsed.", {
+          label,
+        })
+      );
+    }
+  }
+
+  function parseLabelList(text) {
+    const raw = Scratch.Cast.toString(text).trim();
+    if (!raw) {
+      return [];
+    }
+
+    if (raw.startsWith("[")) {
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (_error) {
+        throw new Error(
+          Scratch.translate(
+            "Candidate labels must be a JSON array or a comma-separated list."
+          )
+        );
+      }
+
+      if (!Array.isArray(parsed)) {
+        throw new Error(
+          Scratch.translate(
+            "Candidate labels must be a JSON array or a comma-separated list."
+          )
+        );
+      }
+
+      return parsed.map((item) => Scratch.Cast.toString(item));
+    }
+
+    return raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+
+  function isTensorSpec(value) {
+    return (
+      isPlainObject(value) &&
+      Array.isArray(value.data) &&
+      Array.isArray(value.dims) &&
+      typeof value.type === "string"
+    );
+  }
+
+  function isNumericScalarLike(value) {
+    if (typeof value === "number" || typeof value === "bigint") {
+      return true;
+    }
+    if (typeof value === "boolean") {
+      return true;
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return (
+        /^-?\d+$/.test(trimmed) ||
+        /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(trimmed)
+      );
+    }
+    return false;
+  }
+
+  function isTensorArrayLike(value) {
+    if (!Array.isArray(value)) {
+      return isNumericScalarLike(value);
+    }
+    if (value.length === 0) {
+      return false;
+    }
+    return value.every((item) => isTensorArrayLike(item));
+  }
+
+  function inferTensorDims(value) {
+    const dims = [];
+    let current = value;
+    while (Array.isArray(current)) {
+      dims.push(current.length);
+      current = current[0];
+    }
+    return dims;
+  }
+
+  function flattenTensorArray(value, output) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        flattenTensorArray(item, output);
+      }
+      return;
+    }
+    output.push(value);
+  }
+
+  function inferTensorFromArray(module, value) {
+    if (!isTensorArrayLike(value)) {
+      return value;
+    }
+
+    const flatValues = [];
+    flattenTensorArray(value, flatValues);
+    if (flatValues.length === 0) {
+      return value;
+    }
+
+    let hasFloat = false;
+    let hasBoolean = false;
+    const normalized = flatValues.map((item) => {
+      if (typeof item === "boolean") {
+        hasBoolean = true;
+        return item ? 1 : 0;
+      }
+      if (typeof item === "bigint") {
+        return item;
+      }
+      if (typeof item === "number") {
+        if (!Number.isInteger(item)) {
+          hasFloat = true;
+        }
+        return item;
+      }
+
+      const trimmed = Scratch.Cast.toString(item).trim();
+      if (/^-?\d+$/.test(trimmed)) {
+        return BigInt(trimmed);
+      }
+      if (/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+        const parsed = Number(trimmed);
+        if (!Number.isInteger(parsed)) {
+          hasFloat = true;
+        }
+        return parsed;
+      }
+      return item;
+    });
+
+    const dims = inferTensorDims(value);
+    const dtype = hasBoolean ? "bool" : hasFloat ? "float32" : "int64";
+    const finalValues = normalized.map((item) => {
+      if (dtype === "int64") {
+        return typeof item === "bigint" ? item : BigInt(item);
+      }
+      if (dtype === "bool") {
+        return item ? 1 : 0;
+      }
+      return Number(item);
+    });
+    return new module.Tensor(dtype, finalValues, dims);
+  }
+
+  function looksLikeImageURL(value) {
+    const text = Scratch.Cast.toString(value).trim();
+    return (
+      /^data:image\//i.test(text) ||
+      /^blob:/i.test(text) ||
+      (/^https?:\/\//i.test(text) &&
+        /\.(png|jpe?g|webp|gif|bmp|svg)(?:[?#].*)?$/i.test(text))
+    );
+  }
+
+  async function normalizeProcessorInput(module, value) {
+    if (Array.isArray(value)) {
+      return Promise.all(value.map((item) => normalizeProcessorInput(module, item)));
+    }
+    if (typeof value === "string" && looksLikeImageURL(value)) {
+      try {
+        return await module.RawImage.fromURL(value);
+      } catch (_error) {
+        return value;
+      }
+    }
+    if (!isPlainObject(value)) {
+      return value;
+    }
+    const output = {};
+    for (const [key, entryValue] of Object.entries(value)) {
+      output[key] = await normalizeProcessorInput(module, entryValue);
+    }
+    return output;
+  }
+
+  function convertModelInputs(module, value) {
+    if (Array.isArray(value)) {
+      return inferTensorFromArray(module, value);
+    }
+
+    if (!isPlainObject(value)) {
+      return value;
+    }
+
+    if (isTensorSpec(value)) {
+      return new module.Tensor(
+        value.type,
+        value.data.map((item) =>
+          value.type === "int64" || value.type === "uint64"
+            ? BigInt(item)
+            : item
+        ),
+        value.dims
+      );
+    }
+
+    const output = {};
+    for (const [key, entryValue] of Object.entries(value)) {
+      output[key] = convertModelInputs(module, entryValue);
+    }
+    return output;
+  }
+
+  function invokePipeline(pipeline, input, options) {
+    const task = Scratch.Cast.toString(pipeline.task || "");
+    const hasOptions = Object.keys(options).length > 0;
+
+    if (
+      task === "question-answering" &&
+      isPlainObject(input) &&
+      Object.prototype.hasOwnProperty.call(input, "question") &&
+      Object.prototype.hasOwnProperty.call(input, "context")
+    ) {
+      return hasOptions
+        ? pipeline(
+            Scratch.Cast.toString(input.question),
+            Scratch.Cast.toString(input.context),
+            options
+          )
+        : pipeline(
+            Scratch.Cast.toString(input.question),
+            Scratch.Cast.toString(input.context)
+          );
+    }
+
+    if (task === "zero-shot-classification" && isPlainObject(input)) {
+      const text = Scratch.Cast.toString(
+        input.text ?? input.sequence ?? input.input ?? ""
+      );
+      const rawLabels =
+        input.candidate_labels ?? input.candidateLabels ?? input.labels;
+      if (rawLabels !== undefined) {
+        const labels = Array.isArray(rawLabels)
+          ? rawLabels.map((item) => Scratch.Cast.toString(item))
+          : parseLabelList(rawLabels);
+        return hasOptions
+          ? pipeline(text, labels, options)
+          : pipeline(text, labels);
+      }
+    }
+
+    return hasOptions ? pipeline(input, options) : pipeline(input);
+  }
+
+  function createProgressCallback(kind, name) {
+    return function (info) {
+      setLastProgress({
+        context: kind,
+        name,
+        info: serializeValue(info),
+        timestamp: Date.now(),
+      });
+    };
+  }
+
+  function ensureTransformers() {
+    if (transformersModule) {
+      return transformersModule;
+    }
+    if (transformersModulePromise) {
+      return transformersModulePromise;
+    }
+
+    clearLastError();
+    setLastProgress({
+      context: "module",
+      name: MODULE_URL,
+      info: {
+        status: "loading",
+      },
+      timestamp: Date.now(),
+    });
+
+    transformersModulePromise = (async () => {
+      try {
+        return await Scratch.external.importModule(
+          "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0/dist/transformers.min.js"
+        );
+      } catch (_error) {
+        return import(
+          "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0/dist/transformers.min.js"
+        );
+      }
+    })()
+      .then((module) => {
+        if (!module || !module.pipeline || !module.env) {
+          throw new Error(
+            Scratch.translate(
+              "Transformers.js loaded, but the expected APIs were not found."
+            )
+          );
+        }
+
+        module.env.allowRemoteModels = true;
+        module.env.allowLocalModels = false;
+        module.env.useFS = false;
+        module.env.useFSCache = false;
+        module.env.useBrowserCache = true;
+        module.env.useCustomCache = false;
+        module.env.logLevel = module.LogLevel.ERROR;
+
+        transformersModule = module;
+        setLastProgress({
+          context: "module",
+          name: MODULE_URL,
+          info: {
+            status: "ready",
+            version: module.env.version,
+          },
+          timestamp: Date.now(),
+        });
+        return module;
+      })
+      .catch((error) => {
+        transformersModulePromise = null;
+        setLastError(error.message || Scratch.Cast.toString(error));
+        throw error;
+      });
+
+    return transformersModulePromise;
+  }
+
+  function withPretrainedOptions(kind, name, text) {
+    const options = parseJSONObject(
+      text,
+      Scratch.translate("model options")
+    );
+    if (options.device === "auto") {
+      delete options.device;
+    }
+    if (options.dtype === "auto") {
+      delete options.dtype;
+    }
+    options.progress_callback = createProgressCallback(kind, name);
+    return options;
+  }
+
+  function getResourceId(rawId, counterKey) {
+    const requested = Scratch.Cast.toString(rawId).trim();
+    if (requested) {
+      return requested;
+    }
+
+    const id = counterKey + counters[counterKey];
+    counters[counterKey] += 1;
+    return id;
+  }
+
+  async function disposeValue(value) {
+    if (value && typeof value.dispose === "function") {
+      await value.dispose();
+    }
+  }
+
+  async function setStoreValue(store, id, value) {
+    if (store.has(id)) {
+      await disposeValue(store.get(id));
+    }
+    store.set(id, value);
+  }
+
+  async function removeStoreValue(store, id, missingLabel, removedLabel) {
+    if (!store.has(id)) {
+      return Scratch.translate("{label} not found.", {
+        label: missingLabel,
+      });
+    }
+
+    const value = store.get(id);
+    store.delete(id);
+    await disposeValue(value);
+    return Scratch.translate("{label} released.", {
+      label: removedLabel,
+    });
+  }
+
+  function requireStoreValue(store, id, label) {
+    const key = Scratch.Cast.toString(id).trim();
+    if (!store.has(key)) {
+      throw new Error(
+        Scratch.translate("{label} not found.", {
+          label,
+        })
+      );
+    }
+    return store.get(key);
+  }
+
+  async function disposeAllResources() {
+    for (const store of Object.values(stores)) {
+      for (const value of store.values()) {
+        await disposeValue(value);
+      }
+      store.clear();
+    }
+    counters.pipeline = 1;
+    counters.model = 1;
+    counters.tokenizer = 1;
+    counters.processor = 1;
+  }
+
+  function formatLastProgress() {
+    if (lastErrorMessage) {
+      return Scratch.translate("Error: {message}", {
+        message: lastErrorMessage,
+      });
+    }
+    if (!lastProgressInfo) {
+      return Scratch.translate("Transformers.js has not been loaded yet.");
+    }
+
+    const info = lastProgressInfo.info || {};
+    switch (info.status) {
+      case "loading":
+        return Scratch.translate("Loading Transformers.js module...");
+      case "ready":
+        if (lastProgressInfo.context === "module") {
+          return Scratch.translate("Transformers.js {version} ready.", {
+            version: info.version || LIBRARY_VERSION,
+          });
+        }
+        return Scratch.translate("Ready: {name}", {
+          name: lastProgressInfo.name,
+        });
+      case "initiate":
+        return Scratch.translate("Preparing {file} for {name}.", {
+          file: info.file || "file",
+          name: lastProgressInfo.name,
+        });
+      case "download":
+        return Scratch.translate("Downloading {file} for {name}.", {
+          file: info.file || "file",
+          name: lastProgressInfo.name,
+        });
+      case "progress":
+      case "progress_total":
+        return Scratch.translate("Loading {name}: {progress}%", {
+          name: lastProgressInfo.name,
+          progress: Math.round(info.progress || 0),
+        });
+      case "retrying":
+        return Scratch.translate("Retrying {name} (attempt {attempt})", {
+          name: lastProgressInfo.name,
+          attempt: info.attempt,
+        });
+      case "done":
+        return Scratch.translate("Finished loading {file} for {name}.", {
+          file: info.file || "file",
+          name: lastProgressInfo.name,
+        });
+      default:
+        return stringifyJSON(lastProgressInfo);
+    }
+  }
+
+  async function runEphemeralPipeline(task, modelName, modelOptionsText, callArgs) {
+    const module = await ensureTransformers();
+    const pipelineOptions = await withPretrainedOptions(
+      "pipeline",
+      modelName,
+      modelOptionsText
+    );
+    const runner = await withRetry(
+      () => module.pipeline(task, modelName, pipelineOptions),
+      modelName
+    );
+    try {
+      const result = await callArgs(runner);
+      return stringifyJSON(result);
+    } finally {
+      await disposeValue(runner);
+    }
+  }
+
+  class HuggingFaceTransformersExtension {
+    getInfo() {
+      return {
+        id: "huggingfacetransformers",
+        name: Scratch.translate("Hugging Face Transformers"),
+        color1: "#c7953a",
+        color2: "#b4832c",
+        docsURI: DOCS_URI,
         blocks: [
-            // 状态检查积木块
-            ['r', 'Transformers.js状态', 'getTransformersStatus'],
-            
-            // Pipeline相关积木块
-            [' ', '创建Pipeline 任务类型 %m.pipelineTasks 模型名称 %s', 'createPipeline', 'text-classification', 'Xenova/distilbert-base-uncased-finetuned-sst-2-english'],
-            ['r', 'Pipeline执行 %s 输入 %s', 'runPipeline', 'pipelineId', '输入文本'],
-            [' ', '释放Pipeline %s', 'disposePipeline', 'pipelineId'],
-            
-            // 文本分类
-            ['r', '文本分类 %s 文本 %s', 'textClassification', 'Xenova/distilbert-base-uncased-finetuned-sst-2-english', 'I love this movie!'],
-            
-            // 问答
-            ['r', '问答 %s 问题 %s 上下文 %s', 'questionAnswering', 'Xenova/distilbert-base-uncased-distilled-squad', 'What is AI?', 'Artificial Intelligence is...'],
-            
-            // 文本生成
-            ['r', '文本生成 %s 提示 %s', 'textGeneration', 'Xenova/gpt2', 'Once upon a time'],
-            
-            // 翻译
-            ['r', '翻译 %s 文本 %s', 'translation', 'Xenova/t5-small', 'Hello, world!'],
-            
-            // 摘要
-            ['r', '文本摘要 %s 文本 %s', 'summarization', 'Xenova/bart-large-cnn', '长文本内容...'],
-            
-            // 零样本分类
-            ['r', '零样本分类 %s 文本 %s 候选标签 %s', 'zeroShotClassification', 'Xenova/bart-large-mnli', 'This is a great movie', '["positive", "negative"]'],
-            
-            // 填充掩码
-            ['r', '填充掩码 %s 文本 %s', 'fillMask', 'Xenova/bert-base-uncased', 'The quick brown [MASK] jumps over the lazy dog'],
-            
-            // 情感分析
-            ['r', '情感分析 %s 文本 %s', 'sentimentAnalysis', 'Xenova/distilbert-base-uncased-finetuned-sst-2-english', 'I love programming!'],
-            
-            // 命名实体识别
-            ['r', '命名实体识别 %s 文本 %s', 'namedEntityRecognition', 'Xenova/dbmdz/bert-large-cased-finetuned-conll03-english', 'John works at Google in New York'],
-            
-            // 模型管理积木块
-            [' ', '加载模型 %s 模型名称 %s', 'loadModel', 'modelId', 'Xenova/bert-base-uncased'],
-            [' ', '释放模型 %s', 'disposeModel', 'modelId'],
-            
-            // 分词器积木块
-            [' ', '加载分词器 %s 模型名称 %s', 'loadTokenizer', 'tokenizerId', 'Xenova/bert-base-uncased'],
-            ['r', '分词器编码 %s 文本 %s', 'tokenizerEncode', 'tokenizerId', 'Hello world'],
-            ['r', '分词器解码 %s 标记IDs %s', 'tokenizerDecode', 'tokenizerId', '[101, 7592, 2088, 102]'],
-            [' ', '释放分词器 %s', 'disposeTokenizer', 'tokenizerId'],
-            
-            // 处理器积木块
-            [' ', '加载处理器 %s 模型名称 %s', 'loadProcessor', 'processorId', 'Xenova/clip-vit-base-patch16'],
-            [' ', '释放处理器 %s', 'disposeProcessor', 'processorId'],
-            
-            // 资源管理
-            [' ', '清理所有资源', 'cleanupAll'],
-            
-            // 版本信息
-            ['r', '版本信息', 'getVersion'],
+          {
+            opcode: "getTransformersStatus",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("Transformers status"),
+            disableMonitor: true,
+          },
+          {
+            opcode: "getLastProgress",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("last loading progress"),
+            disableMonitor: true,
+          },
+          {
+            opcode: "getVersion",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("library version"),
+            disableMonitor: true,
+          },
+          {
+            opcode: "supportsWebGPU",
+            blockType: Scratch.BlockType.BOOLEAN,
+            text: Scratch.translate("WebGPU supported?"),
+          },
+          "---",
+          {
+            opcode: "quickSentiment",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("analyze sentiment of [TEXT]"),
+            arguments: {
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "I love this movie!",
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "quickQuestionAnswering",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("answer [QUESTION] from [CONTEXT]"),
+            arguments: {
+              QUESTION: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "Who was Jim Henson?",
+              },
+              CONTEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "Jim Henson was a nice puppet.",
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "quickTextGeneration",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("generate text from [INPUT]"),
+            arguments: {
+              INPUT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "Write a short greeting.",
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "quickTranslation",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("translate [TEXT]"),
+            arguments: {
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "Hello, world!",
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "quickSummarization",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("summarize [TEXT]"),
+            arguments: {
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue:
+                  "Transformers.js can run machine learning models directly in the browser.",
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "quickZeroShot",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("classify [TEXT] with labels [LABELS]"),
+            arguments: {
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "This is a great movie",
+              },
+              LABELS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: 'positive, negative',
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "quickFillMask",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("fill the blank in [TEXT]"),
+            arguments: {
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "The quick brown [MASK] jumps over the lazy dog.",
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "quickNamedEntityRecognition",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("find named entities in [TEXT]"),
+            arguments: {
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "John works at Google in New York.",
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "getAvailableDtypes",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: available dtypes for model [MODEL] options [OPTIONS]"
+            ),
+            arguments: {
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_GENERATION_MODEL,
+              },
+              OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: EMPTY_JSON_OBJECT,
+              },
+            },
+            disableMonitor: true,
+          },
+          "---",
+          {
+            opcode: "createPipeline",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: load pipeline [ID] task [TASK] model [MODEL] options [OPTIONS]"
+            ),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "pipeline1",
+              },
+              TASK: {
+                type: Scratch.ArgumentType.STRING,
+                menu: "taskMenu",
+                defaultValue: "text-classification",
+              },
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_SENTIMENT_MODEL,
+              },
+              OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_MODEL_OPTIONS,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "runPipeline",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: run pipeline [ID] input [INPUT] options [OPTIONS]"
+            ),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "pipeline1",
+              },
+              INPUT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "I love Transformers.js!",
+              },
+              OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: EMPTY_JSON_OBJECT,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "disposePipeline",
+            blockType: Scratch.BlockType.COMMAND,
+            text: Scratch.translate("advanced: release pipeline [ID]"),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "pipeline1",
+              },
+            },
+          },
+          "---",
+          {
+            opcode: "textClassification",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: text classification model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]"
+            ),
+            arguments: {
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_SENTIMENT_MODEL,
+              },
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "I love this movie!",
+              },
+              MODEL_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_TRANSLATION_MODEL_OPTIONS,
+              },
+              RUN_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: EMPTY_JSON_OBJECT,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "questionAnswering",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: question answering model [MODEL] question [QUESTION] context [CONTEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]"
+            ),
+            arguments: {
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_QA_MODEL,
+              },
+              QUESTION: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "What is AI?",
+              },
+              CONTEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "Artificial intelligence is a field of computer science.",
+              },
+              MODEL_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: '{"device":"auto","dtype":"fp32"}',
+              },
+              RUN_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: EMPTY_JSON_OBJECT,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "textGeneration",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: text generation model [MODEL] input [INPUT] model options [MODEL_OPTIONS] generate options [GENERATE_OPTIONS]"
+            ),
+            arguments: {
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_GENERATION_MODEL,
+              },
+              INPUT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "Once upon a time,",
+              },
+              MODEL_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: '{"device":"webgpu","dtype":"q4"}',
+              },
+              GENERATE_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: '{"max_new_tokens":32,"return_full_text":false}',
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "translation",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: translation model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]"
+            ),
+            arguments: {
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_TRANSLATION_MODEL,
+              },
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "Hello, world!",
+              },
+              MODEL_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_MODEL_OPTIONS,
+              },
+              RUN_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: EMPTY_JSON_OBJECT,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "summarization",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: summarization model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]"
+            ),
+            arguments: {
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_SUMMARIZATION_MODEL,
+              },
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue:
+                  "Transformers.js can run modern Hugging Face models directly in the browser.",
+              },
+              MODEL_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_MODEL_OPTIONS,
+              },
+              RUN_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: '{"max_new_tokens":64}',
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "zeroShotClassification",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: zero shot classification model [MODEL] text [TEXT] labels [LABELS] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]"
+            ),
+            arguments: {
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_ZERO_SHOT_MODEL,
+              },
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "This is a great movie",
+              },
+              LABELS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: '["positive","negative"]',
+              },
+              MODEL_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_MODEL_OPTIONS,
+              },
+              RUN_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: EMPTY_JSON_OBJECT,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "fillMask",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: fill mask model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]"
+            ),
+            arguments: {
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_FILL_MASK_MODEL,
+              },
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "The quick brown [MASK] jumps over the lazy dog.",
+              },
+              MODEL_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_MODEL_OPTIONS,
+              },
+              RUN_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: EMPTY_JSON_OBJECT,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "sentimentAnalysis",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: sentiment analysis model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]"
+            ),
+            arguments: {
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_SENTIMENT_MODEL,
+              },
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "I love programming!",
+              },
+              MODEL_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_MODEL_OPTIONS,
+              },
+              RUN_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: EMPTY_JSON_OBJECT,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "namedEntityRecognition",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: named entity recognition model [MODEL] text [TEXT] model options [MODEL_OPTIONS] run options [RUN_OPTIONS]"
+            ),
+            arguments: {
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_NER_MODEL,
+              },
+              TEXT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "John works at Google in New York.",
+              },
+              MODEL_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_MODEL_OPTIONS,
+              },
+              RUN_OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: '{"aggregation_strategy":"simple"}',
+              },
+            },
+            disableMonitor: true,
+          },
+          "---",
+          {
+            opcode: "loadModel",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: load model [ID] model [MODEL] options [OPTIONS]"
+            ),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "model1",
+              },
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_GENERIC_MODEL,
+              },
+              OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_MODEL_OPTIONS,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "runModel",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("advanced: run model [ID] inputs [INPUTS]"),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "model1",
+              },
+              INPUTS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: '{"input_ids":[[101,7592,2088,102]]}',
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "disposeModel",
+            blockType: Scratch.BlockType.COMMAND,
+            text: Scratch.translate("advanced: release model [ID]"),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "model1",
+              },
+            },
+          },
+          "---",
+          {
+            opcode: "loadTokenizer",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: load tokenizer [ID] model [MODEL] options [OPTIONS]"
+            ),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "tokenizer1",
+              },
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_GENERIC_MODEL,
+              },
+              OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: EMPTY_JSON_OBJECT,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "tokenizerEncode",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("advanced: tokenizer [ID] encode [INPUT]"),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "tokenizer1",
+              },
+              INPUT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "Hello world",
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "tokenizerDecode",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("advanced: tokenizer [ID] decode [TOKENS]"),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "tokenizer1",
+              },
+              TOKENS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "[101,7592,2088,102]",
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "disposeTokenizer",
+            blockType: Scratch.BlockType.COMMAND,
+            text: Scratch.translate("advanced: release tokenizer [ID]"),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "tokenizer1",
+              },
+            },
+          },
+          "---",
+          {
+            opcode: "loadProcessor",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate(
+              "advanced: load processor [ID] model [MODEL] options [OPTIONS]"
+            ),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "processor1",
+              },
+              MODEL: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: DEFAULT_PROCESSOR_MODEL,
+              },
+              OPTIONS: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: EMPTY_JSON_OBJECT,
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "runProcessor",
+            blockType: Scratch.BlockType.REPORTER,
+            text: Scratch.translate("advanced: processor [ID] run [INPUT]"),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "processor1",
+              },
+              INPUT: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue:
+                  "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/tiger.jpg",
+              },
+            },
+            disableMonitor: true,
+          },
+          {
+            opcode: "disposeProcessor",
+            blockType: Scratch.BlockType.COMMAND,
+            text: Scratch.translate("advanced: release processor [ID]"),
+            arguments: {
+              ID: {
+                type: Scratch.ArgumentType.STRING,
+                defaultValue: "processor1",
+              },
+            },
+          },
+          "---",
+          {
+            opcode: "cleanupAll",
+            blockType: Scratch.BlockType.COMMAND,
+            text: Scratch.translate("advanced: release all resources"),
+          },
         ],
         menus: {
-            pipelineTasks: [
-                'text-classification',
-                'question-answering', 
-                'text-generation',
-                'translation',
-                'summarization',
-                'zero-shot-classification',
-                'fill-mask',
-                'sentiment-analysis',
-                'named-entity-recognition',
-                'image-classification',
-                'automatic-speech-recognition',
-                'object-detection',
-                'image-segmentation'
-            ]
+          taskMenu: {
+            acceptReporters: true,
+            items: [
+              {
+                text: Scratch.translate("text classification"),
+                value: "text-classification",
+              },
+              {
+                text: Scratch.translate("sentiment analysis"),
+                value: "sentiment-analysis",
+              },
+              {
+                text: Scratch.translate("question answering"),
+                value: "question-answering",
+              },
+              {
+                text: Scratch.translate("text generation"),
+                value: "text-generation",
+              },
+              {
+                text: Scratch.translate("translation"),
+                value: "translation",
+              },
+              {
+                text: Scratch.translate("summarization"),
+                value: "summarization",
+              },
+              {
+                text: Scratch.translate("zero-shot classification"),
+                value: "zero-shot-classification",
+              },
+              {
+                text: Scratch.translate("fill mask"),
+                value: "fill-mask",
+              },
+              {
+                text: Scratch.translate("token classification"),
+                value: "token-classification",
+              },
+              {
+                text: Scratch.translate("named entity recognition"),
+                value: "ner",
+              },
+              {
+                text: Scratch.translate("feature extraction"),
+                value: "feature-extraction",
+              },
+              {
+                text: Scratch.translate("image classification"),
+                value: "image-classification",
+              },
+              {
+                text: Scratch.translate("image to text"),
+                value: "image-to-text",
+              },
+              {
+                text: Scratch.translate("image segmentation"),
+                value: "image-segmentation",
+              },
+              {
+                text: Scratch.translate("object detection"),
+                value: "object-detection",
+              },
+              {
+                text: Scratch.translate("automatic speech recognition"),
+                value: "automatic-speech-recognition",
+              },
+              {
+                text: Scratch.translate("audio classification"),
+                value: "audio-classification",
+              },
+              {
+                text: Scratch.translate("text to audio"),
+                value: "text-to-audio",
+              },
+              {
+                text: Scratch.translate("text to text generation"),
+                value: "text2text-generation",
+              },
+            ],
+          },
+          deviceMenu: {
+            acceptReporters: true,
+            items: [
+              { text: Scratch.translate("auto"), value: "auto" },
+              { text: Scratch.translate("cpu"), value: "cpu" },
+              { text: Scratch.translate("wasm"), value: "wasm" },
+              { text: Scratch.translate("webgpu"), value: "webgpu" },
+              { text: Scratch.translate("webnn"), value: "webnn" },
+              { text: Scratch.translate("webnn gpu"), value: "webnn-gpu" },
+              { text: Scratch.translate("webnn cpu"), value: "webnn-cpu" },
+              { text: Scratch.translate("webnn npu"), value: "webnn-npu" },
+              { text: Scratch.translate("gpu"), value: "gpu" },
+            ],
+          },
+          dtypeMenu: {
+            acceptReporters: true,
+            items: [
+              { text: Scratch.translate("auto"), value: "auto" },
+              { text: Scratch.translate("fp32"), value: "fp32" },
+              { text: Scratch.translate("fp16"), value: "fp16" },
+              { text: Scratch.translate("q8"), value: "q8" },
+              { text: Scratch.translate("int8"), value: "int8" },
+              { text: Scratch.translate("uint8"), value: "uint8" },
+              { text: Scratch.translate("q4"), value: "q4" },
+              { text: Scratch.translate("bnb4"), value: "bnb4" },
+              { text: Scratch.translate("q4f16"), value: "q4f16" },
+              { text: Scratch.translate("q2"), value: "q2" },
+              { text: Scratch.translate("q2f16"), value: "q2f16" },
+              { text: Scratch.translate("q1"), value: "q1" },
+              { text: Scratch.translate("q1f16"), value: "q1f16" },
+            ],
+          },
         },
-        url: 'https://github.com/xenova/transformers.js',
-        displayName: 'Transformers.js',
-        extensionId: 'transformersjs'
-    };
-    
-    // ==================== 状态检查函数 ====================
-    
-    /**
-     * 获取Transformers.js状态
-     * @returns {string} 状态信息
-     */
-    ext.getTransformersStatus = async function() {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            return 'Transformers.js v3.8.1 已加载';
-        } catch (error) {
-            return '错误: ' + error.message;
-        }
-    };
-    
-    // ==================== Pipeline函数 ====================
-    
-    /**
-     * 创建Pipeline
-     * @param {string} task - 任务类型
-     * @param {string} modelName - 模型名称
-     * @returns {string} Pipeline ID
-     */
-    ext.createPipeline = async function(task, modelName) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            // 创建Pipeline
-            const pipeline = await tfjs.pipeline(task, modelName);
-            const pipelineId = 'pipeline_' + nextPipelineId++;
-            pipelines[pipelineId] = pipeline;
-            
-            return pipelineId;
-        } catch (error) {
-            console.error('创建Pipeline失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 执行Pipeline
-     * @param {string} pipelineId - Pipeline ID
-     * @param {string} input - 输入数据
-     * @returns {string} 处理结果的JSON字符串
-     */
-    ext.runPipeline = async function(pipelineId, input) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            if (!pipelines[pipelineId]) {
-                throw new Error('未找到指定的Pipeline');
-            }
-            
-            const pipeline = pipelines[pipelineId];
-            
-            // 执行Pipeline
-            const result = await pipeline(input);
-            
-            // 将结果转换为JSON字符串
-            return safeStringify(result);
-        } catch (error) {
-            console.error('执行Pipeline失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 释放Pipeline
-     * @param {string} pipelineId - Pipeline ID
-     * @returns {string} 成功消息
-     */
-    ext.disposePipeline = function(pipelineId) {
-        try {
-            if (pipelines[pipelineId]) {
-                // 如果Pipeline有dispose方法，调用它
-                if (typeof pipelines[pipelineId].dispose === 'function') {
-                    pipelines[pipelineId].dispose();
-                }
-                delete pipelines[pipelineId];
-                return 'Pipeline已释放';
-            } else {
-                return '未找到指定的Pipeline';
-            }
-        } catch (error) {
-            console.error('释放Pipeline失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    // ==================== 特定任务函数 ====================
-    
-    /**
-     * 文本分类
-     * @param {string} modelName - 模型名称
-     * @param {string} text - 文本
-     * @returns {string} 分类结果的JSON字符串
-     */
-    ext.textClassification = async function(modelName, text) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            // 创建文本分类Pipeline
-            const classifier = await tfjs.pipeline('text-classification', modelName);
-            const result = await classifier(text);
-            
-            // 释放资源
-            if (typeof classifier.dispose === 'function') {
-                classifier.dispose();
-            }
-            
-            return JSON.stringify(result, null, 2);
-        } catch (error) {
-            console.error('文本分类失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 问答
-     * @param {string} modelName - 模型名称
-     * @param {string} question - 问题
-     * @param {string} context - 上下文
-     * @returns {string} 答案的JSON字符串
-     */
-    ext.questionAnswering = async function(modelName, question, context) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            const qaPipeline = await tfjs.pipeline('question-answering', modelName);
-            const result = await qaPipeline({
-                question: question,
-                context: context
-            });
-            
-            if (typeof qaPipeline.dispose === 'function') {
-                qaPipeline.dispose();
-            }
-            
-            return JSON.stringify(result, null, 2);
-        } catch (error) {
-            console.error('问答失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 文本生成
-     * @param {string} modelName - 模型名称
-     * @param {string} prompt - 提示文本
-     * @returns {string} 生成文本的JSON字符串
-     */
-    ext.textGeneration = async function(modelName, prompt) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            const generator = await tfjs.pipeline('text-generation', modelName);
-            const result = await generator(prompt, {
-                max_new_tokens: 50,
-                temperature: 0.7
-            });
-            
-            if (typeof generator.dispose === 'function') {
-                generator.dispose();
-            }
-            
-            return JSON.stringify(result, null, 2);
-        } catch (error) {
-            console.error('文本生成失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 翻译
-     * @param {string} modelName - 模型名称
-     * @param {string} text - 要翻译的文本
-     * @returns {string} 翻译结果的JSON字符串
-     */
-    ext.translation = async function(modelName, text) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            const translator = await tfjs.pipeline('translation', modelName);
-            const result = await translator(text);
-            
-            if (typeof translator.dispose === 'function') {
-                translator.dispose();
-            }
-            
-            return JSON.stringify(result, null, 2);
-        } catch (error) {
-            console.error('翻译失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 文本摘要
-     * @param {string} modelName - 模型名称
-     * @param {string} text - 要摘要的文本
-     * @returns {string} 摘要结果的JSON字符串
-     */
-    ext.summarization = async function(modelName, text) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            const summarizer = await tfjs.pipeline('summarization', modelName);
-            const result = await summarizer(text, {
-                max_length: 100,
-                min_length: 30
-            });
-            
-            if (typeof summarizer.dispose === 'function') {
-                summarizer.dispose();
-            }
-            
-            return JSON.stringify(result, null, 2);
-        } catch (error) {
-            console.error('文本摘要失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 零样本分类
-     * @param {string} modelName - 模型名称
-     * @param {string} text - 要分类的文本
-     * @param {string} candidateLabelsStr - 候选标签的JSON字符串
-     * @returns {string} 分类结果的JSON字符串
-     */
-    ext.zeroShotClassification = async function(modelName, text, candidateLabelsStr) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            let candidateLabels;
-            try {
-                candidateLabels = JSON.parse(candidateLabelsStr);
-            } catch (e) {
-                throw new Error('无法解析候选标签，请确保输入有效的JSON数组');
-            }
-            
-            const classifier = await tfjs.pipeline('zero-shot-classification', modelName);
-            const result = await classifier(text, candidateLabels);
-            
-            if (typeof classifier.dispose === 'function') {
-                classifier.dispose();
-            }
-            
-            return JSON.stringify(result, null, 2);
-        } catch (error) {
-            console.error('零样本分类失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 填充掩码
-     * @param {string} modelName - 模型名称
-     * @param {string} text - 包含[MASK]的文本
-     * @returns {string} 填充结果的JSON字符串
-     */
-    ext.fillMask = async function(modelName, text) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            const filler = await tfjs.pipeline('fill-mask', modelName);
-            const result = await filler(text);
-            
-            if (typeof filler.dispose === 'function') {
-                filler.dispose();
-            }
-            
-            return JSON.stringify(result, null, 2);
-        } catch (error) {
-            console.error('填充掩码失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 情感分析
-     * @param {string} modelName - 模型名称
-     * @param {string} text - 要分析的文本
-     * @returns {string} 情感分析结果的JSON字符串
-     */
-    ext.sentimentAnalysis = async function(modelName, text) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            const sentiment = await tfjs.pipeline('sentiment-analysis', modelName);
-            const result = await sentiment(text);
-            
-            if (typeof sentiment.dispose === 'function') {
-                sentiment.dispose();
-            }
-            
-            return JSON.stringify(result, null, 2);
-        } catch (error) {
-            console.error('情感分析失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 命名实体识别
-     * @param {string} modelName - 模型名称
-     * @param {string} text - 要分析的文本
-     * @returns {string} 实体识别结果的JSON字符串
-     */
-    ext.namedEntityRecognition = async function(modelName, text) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            const ner = await tfjs.pipeline('named-entity-recognition', modelName);
-            const result = await ner(text);
-            
-            if (typeof ner.dispose === 'function') {
-                ner.dispose();
-            }
-            
-            return JSON.stringify(result, null, 2);
-        } catch (error) {
-            console.error('命名实体识别失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    // ==================== 模型管理函数 ====================
-    
-    /**
-     * 加载模型
-     * @param {string} modelId - 模型ID
-     * @param {string} modelName - 模型名称
-     * @returns {string} 成功消息
-     */
-    ext.loadModel = async function(modelId, modelName) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            if (!tfjs.AutoModel) {
-                throw new Error('当前Transformers.js版本不支持AutoModel');
-            }
-            
-            const model = await tfjs.AutoModel.from_pretrained(modelName);
-            models[modelId] = model;
-            
-            return '模型加载成功: ' + modelName;
-        } catch (error) {
-            console.error('加载模型失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 释放模型
-     * @param {string} modelId - 模型ID
-     * @returns {string} 成功消息
-     */
-    ext.disposeModel = function(modelId) {
-        try {
-            if (models[modelId]) {
-                if (typeof models[modelId].dispose === 'function') {
-                    models[modelId].dispose();
-                }
-                delete models[modelId];
-                return '模型已释放';
-            } else {
-                return '未找到指定的模型';
-            }
-        } catch (error) {
-            console.error('释放模型失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    // ==================== 分词器函数 ====================
-    
-    /**
-     * 加载分词器
-     * @param {string} tokenizerId - 分词器ID
-     * @param {string} modelName - 模型名称
-     * @returns {string} 成功消息
-     */
-    ext.loadTokenizer = async function(tokenizerId, modelName) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            if (!tfjs.AutoTokenizer) {
-                throw new Error('当前Transformers.js版本不支持AutoTokenizer');
-            }
-            
-            const tokenizer = await tfjs.AutoTokenizer.from_pretrained(modelName);
-            tokenizers[tokenizerId] = tokenizer;
-            
-            return '分词器加载成功: ' + modelName;
-        } catch (error) {
-            console.error('加载分词器失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 分词器编码
-     * @param {string} tokenizerId - 分词器ID
-     * @param {string} text - 要编码的文本
-     * @returns {string} 编码结果的JSON字符串
-     */
-    ext.tokenizerEncode = async function(tokenizerId, text) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            if (!tokenizers[tokenizerId]) {
-                throw new Error('未找到指定的分词器');
-            }
-            
-            const tokenizer = tokenizers[tokenizerId];
-            const encoding = tokenizer(text);
-            
-            // 使用安全的JSON序列化函数
-            return safeStringify(encoding);
-        } catch (error) {
-            console.error('分词器编码失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 分词器解码
-     * @param {string} tokenizerId - 分词器ID
-     * @param {string} tokenIdsStr - 标记ID数组的JSON字符串
-     * @returns {string} 解码后的文本
-     */
-    ext.tokenizerDecode = async function(tokenizerId, tokenIdsStr) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            if (!tokenizers[tokenizerId]) {
-                throw new Error('未找到指定的分词器');
-            }
-            
-            let tokenIds;
-            try {
-                tokenIds = JSON.parse(tokenIdsStr);
-            } catch (e) {
-                throw new Error('无法解析标记ID，请确保输入有效的JSON数组');
-            }
-            
-            const tokenizer = tokenizers[tokenizerId];
-            const decoded = tokenizer.decode(tokenIds);
-            
-            return decoded;
-        } catch (error) {
-            console.error('分词器解码失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 释放分词器
-     * @param {string} tokenizerId - 分词器ID
-     * @returns {string} 成功消息
-     */
-    ext.disposeTokenizer = function(tokenizerId) {
-        try {
-            if (tokenizers[tokenizerId]) {
-                if (typeof tokenizers[tokenizerId].dispose === 'function') {
-                    tokenizers[tokenizerId].dispose();
-                }
-                delete tokenizers[tokenizerId];
-                return '分词器已释放';
-            } else {
-                return '未找到指定的分词器';
-            }
-        } catch (error) {
-            console.error('释放分词器失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    // ==================== 处理器函数 ====================
-    
-    /**
-     * 加载处理器
-     * @param {string} processorId - 处理器ID
-     * @param {string} modelName - 模型名称
-     * @returns {string} 成功消息
-     */
-    ext.loadProcessor = async function(processorId, modelName) {
-        try {
-            const tfjs = await ensureTransformersLoaded();
-            
-            if (!tfjs.AutoProcessor) {
-                throw new Error('当前Transformers.js版本不支持AutoProcessor');
-            }
-            
-            const processor = await tfjs.AutoProcessor.from_pretrained(modelName);
-            processors[processorId] = processor;
-            
-            return '处理器加载成功: ' + modelName;
-        } catch (error) {
-            console.error('加载处理器失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    /**
-     * 释放处理器
-     * @param {string} processorId - 处理器ID
-     * @returns {string} 成功消息
-     */
-    ext.disposeProcessor = function(processorId) {
-        try {
-            if (processors[processorId]) {
-                if (typeof processors[processorId].dispose === 'function') {
-                    processors[processorId].dispose();
-                }
-                delete processors[processorId];
-                return '处理器已释放';
-            } else {
-                return '未找到指定的处理器';
-            }
-        } catch (error) {
-            console.error('释放处理器失败:', error);
-            return '错误: ' + error.message;
-        }
-    };
-    
-    // ==================== 资源管理函数 ====================
-    
-    /**
-     * 清理所有资源
-     */
-    ext.cleanupAll = async function() {
-        try {
-            // 清理所有Pipeline
-            for (const id in pipelines) {
-                if (pipelines[id] && typeof pipelines[id].dispose === 'function') {
-                    try {
-                        pipelines[id].dispose();
-                    } catch (e) {
-                        console.warn('清理Pipeline时出错:', e);
-                    }
-                }
-            }
-            
-            // 清理所有模型
-            for (const id in models) {
-                if (models[id] && typeof models[id].dispose === 'function') {
-                    try {
-                        models[id].dispose();
-                    } catch (e) {
-                        console.warn('清理模型时出错:', e);
-                    }
-                }
-            }
-            
-            // 清理所有分词器
-            for (const id in tokenizers) {
-                if (tokenizers[id] && typeof tokenizers[id].dispose === 'function') {
-                    try {
-                        tokenizers[id].dispose();
-                    } catch (e) {
-                        console.warn('清理分词器时出错:', e);
-                    }
-                }
-            }
-            
-            // 清理所有处理器
-            for (const id in processors) {
-                if (processors[id] && typeof processors[id].dispose === 'function') {
-                    try {
-                        processors[id].dispose();
-                    } catch (e) {
-                        console.warn('清理处理器时出错:', e);
-                    }
-                }
-            }
-            
-            // 重置所有存储
-            pipelines = {};
-            models = {};
-            tokenizers = {};
-            processors = {};
-            nextPipelineId = 1;
-            nextModelId = 1;
-            nextTokenizerId = 1;
-            nextProcessorId = 1;
-            
-            console.log('所有Transformers.js资源已清理');
-        } catch (error) {
-            console.error('清理资源失败:', error);
-        }
-    };
-    
-    /**
-     * 获取版本信息
-     * @returns {string} 版本信息
-     */
-    ext.getVersion = function() {
-        return 'Transformers.js Turbowarp扩展 v1.0.0';
-    };
-    
-    // ==================== 扩展注册 ====================
-    
-    // 注册扩展
-    if (typeof ScratchExtensions !== 'undefined') {
-        ScratchExtensions.register('Transformers', descriptor, ext);
-    } else if (typeof window.TurboWarp !== 'undefined') {
-        // Turbowarp兼容
-        window.TurboWarp.extensions.register(descriptor, ext);
-    } else {
-        console.error('未找到Scratch或Turbowarp扩展系统');
+      };
     }
-    
-})({});
+
+    getTransformersStatus() {
+      return formatLastProgress();
+    }
+
+    quickSentiment(args) {
+      return this.sentimentAnalysis({
+        MODEL: DEFAULT_SENTIMENT_MODEL,
+        TEXT: args.TEXT,
+        MODEL_OPTIONS: DEFAULT_MODEL_OPTIONS,
+        RUN_OPTIONS: EMPTY_JSON_OBJECT,
+      });
+    }
+
+    quickQuestionAnswering(args) {
+      return this.questionAnswering({
+        MODEL: DEFAULT_QA_MODEL,
+        QUESTION: args.QUESTION,
+        CONTEXT: args.CONTEXT,
+        MODEL_OPTIONS: DEFAULT_MODEL_OPTIONS,
+        RUN_OPTIONS: EMPTY_JSON_OBJECT,
+      });
+    }
+
+    quickTextGeneration(args) {
+      return this.textGeneration({
+        MODEL: DEFAULT_GENERATION_MODEL,
+        INPUT: args.INPUT,
+        MODEL_OPTIONS: DEFAULT_GENERATION_MODEL_OPTIONS,
+        GENERATE_OPTIONS: '{"max_new_tokens":32,"return_full_text":false}',
+      });
+    }
+
+    quickTranslation(args) {
+      return this.translation({
+        MODEL: DEFAULT_TRANSLATION_MODEL,
+        TEXT: args.TEXT,
+        MODEL_OPTIONS: DEFAULT_TRANSLATION_MODEL_OPTIONS,
+        RUN_OPTIONS: EMPTY_JSON_OBJECT,
+      });
+    }
+
+    quickSummarization(args) {
+      return this.summarization({
+        MODEL: DEFAULT_SUMMARIZATION_MODEL,
+        TEXT: args.TEXT,
+        MODEL_OPTIONS: '{"device":"auto","dtype":"fp32"}',
+        RUN_OPTIONS: '{"max_new_tokens":64}',
+      });
+    }
+
+    quickZeroShot(args) {
+      return this.zeroShotClassification({
+        MODEL: DEFAULT_ZERO_SHOT_MODEL,
+        TEXT: args.TEXT,
+        LABELS: args.LABELS,
+        MODEL_OPTIONS: DEFAULT_MODEL_OPTIONS,
+        RUN_OPTIONS: EMPTY_JSON_OBJECT,
+      });
+    }
+
+    quickFillMask(args) {
+      return this.fillMask({
+        MODEL: DEFAULT_FILL_MASK_MODEL,
+        TEXT: args.TEXT,
+        MODEL_OPTIONS: DEFAULT_FILL_MASK_MODEL_OPTIONS,
+        RUN_OPTIONS: EMPTY_JSON_OBJECT,
+      });
+    }
+
+    quickNamedEntityRecognition(args) {
+      return this.namedEntityRecognition({
+        MODEL: DEFAULT_NER_MODEL,
+        TEXT: args.TEXT,
+        MODEL_OPTIONS: DEFAULT_MODEL_OPTIONS,
+        RUN_OPTIONS: '{"aggregation_strategy":"simple"}',
+      });
+    }
+
+    getLastProgress() {
+      if (!lastProgressInfo) {
+        return EMPTY_JSON_OBJECT;
+      }
+      return stringifyJSON(lastProgressInfo);
+    }
+
+    supportsWebGPU() {
+      return typeof navigator !== "undefined" && "gpu" in navigator;
+    }
+
+    async getAvailableDtypes(args) {
+      try {
+        clearLastError();
+        const module = await ensureTransformers();
+        const options = parseJSONObject(
+          args.OPTIONS,
+          Scratch.translate("registry options")
+        );
+        const dtypes = await module.ModelRegistry.get_available_dtypes(
+          Scratch.Cast.toString(args.MODEL),
+          options
+        );
+        return stringifyJSON(dtypes);
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async createPipeline(args) {
+      try {
+        clearLastError();
+        const module = await ensureTransformers();
+        const id = getResourceId(args.ID, "pipeline");
+        const modelName = Scratch.Cast.toString(args.MODEL);
+        const task = Scratch.Cast.toString(args.TASK);
+        const options = await withPretrainedOptions(
+          "pipeline",
+          modelName,
+          args.OPTIONS
+        );
+        const pipeline = await withRetry(
+          () => module.pipeline(task, modelName, options),
+          modelName
+        );
+        await setStoreValue(stores.pipelines, id, pipeline);
+        setLastProgress({
+          context: "pipeline",
+          name: id,
+          info: {
+            status: "ready",
+            task,
+            model: modelName,
+          },
+          timestamp: Date.now(),
+        });
+        return id;
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async runPipeline(args) {
+      try {
+        clearLastError();
+        const pipeline = requireStoreValue(
+          stores.pipelines,
+          args.ID,
+          Scratch.translate("Pipeline")
+        );
+        const input = parseMaybeStructuredInput(
+          args.INPUT,
+          Scratch.translate("input")
+        );
+        const options = parseJSONObject(
+          args.OPTIONS,
+          Scratch.translate("run options")
+        );
+        const result = await invokePipeline(pipeline, input, options);
+        return stringifyJSON(result);
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async disposePipeline(args) {
+      await removeStoreValue(
+        stores.pipelines,
+        Scratch.Cast.toString(args.ID).trim(),
+        Scratch.translate("Pipeline"),
+        Scratch.translate("Pipeline")
+      );
+    }
+
+    async textClassification(args) {
+      try {
+        clearLastError();
+        return await runEphemeralPipeline(
+          "text-classification",
+          Scratch.Cast.toString(args.MODEL),
+          args.MODEL_OPTIONS,
+          (pipeline) => {
+            const options = parseJSONObject(
+              args.RUN_OPTIONS,
+              Scratch.translate("run options")
+            );
+            return Object.keys(options).length > 0
+              ? pipeline(Scratch.Cast.toString(args.TEXT), options)
+              : pipeline(Scratch.Cast.toString(args.TEXT));
+          }
+        );
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async questionAnswering(args) {
+      try {
+        clearLastError();
+        return await runEphemeralPipeline(
+          "question-answering",
+          Scratch.Cast.toString(args.MODEL),
+          args.MODEL_OPTIONS,
+          (pipeline) => {
+            const options = parseJSONObject(
+              args.RUN_OPTIONS,
+              Scratch.translate("run options")
+            );
+            return Object.keys(options).length > 0
+              ? pipeline(
+                  Scratch.Cast.toString(args.QUESTION),
+                  Scratch.Cast.toString(args.CONTEXT),
+                  options
+                )
+              : pipeline(
+                  Scratch.Cast.toString(args.QUESTION),
+                  Scratch.Cast.toString(args.CONTEXT)
+                );
+          }
+        );
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async textGeneration(args) {
+      try {
+        clearLastError();
+        return await runEphemeralPipeline(
+          "text-generation",
+          Scratch.Cast.toString(args.MODEL),
+          args.MODEL_OPTIONS,
+          (pipeline) => {
+            const input = parseMaybeStructuredInput(
+              args.INPUT,
+              Scratch.translate("input")
+            );
+            const options = parseJSONObject(
+              args.GENERATE_OPTIONS,
+              Scratch.translate("generation options")
+            );
+            return Object.keys(options).length > 0
+              ? pipeline(input, options)
+              : pipeline(input);
+          }
+        );
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async translation(args) {
+      try {
+        clearLastError();
+        return await runEphemeralPipeline(
+          "translation",
+          Scratch.Cast.toString(args.MODEL),
+          args.MODEL_OPTIONS,
+          (pipeline) => {
+            const options = parseJSONObject(
+              args.RUN_OPTIONS,
+              Scratch.translate("run options")
+            );
+            return Object.keys(options).length > 0
+              ? pipeline(Scratch.Cast.toString(args.TEXT), options)
+              : pipeline(Scratch.Cast.toString(args.TEXT));
+          }
+        );
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async summarization(args) {
+      try {
+        clearLastError();
+        return await runEphemeralPipeline(
+          "summarization",
+          Scratch.Cast.toString(args.MODEL),
+          args.MODEL_OPTIONS,
+          (pipeline) => {
+            const options = parseJSONObject(
+              args.RUN_OPTIONS,
+              Scratch.translate("run options")
+            );
+            return Object.keys(options).length > 0
+              ? pipeline(Scratch.Cast.toString(args.TEXT), options)
+              : pipeline(Scratch.Cast.toString(args.TEXT));
+          }
+        );
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async zeroShotClassification(args) {
+      try {
+        clearLastError();
+        return await runEphemeralPipeline(
+          "zero-shot-classification",
+          Scratch.Cast.toString(args.MODEL),
+          args.MODEL_OPTIONS,
+          (pipeline) => {
+            const options = parseJSONObject(
+              args.RUN_OPTIONS,
+              Scratch.translate("run options")
+            );
+            const labels = parseLabelList(args.LABELS);
+            return Object.keys(options).length > 0
+              ? pipeline(Scratch.Cast.toString(args.TEXT), labels, options)
+              : pipeline(Scratch.Cast.toString(args.TEXT), labels);
+          }
+        );
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async fillMask(args) {
+      try {
+        clearLastError();
+        return await runEphemeralPipeline(
+          "fill-mask",
+          Scratch.Cast.toString(args.MODEL),
+          args.MODEL_OPTIONS,
+          (pipeline) => {
+            const options = parseJSONObject(
+              args.RUN_OPTIONS,
+              Scratch.translate("run options")
+            );
+            return Object.keys(options).length > 0
+              ? pipeline(Scratch.Cast.toString(args.TEXT), options)
+              : pipeline(Scratch.Cast.toString(args.TEXT));
+          }
+        );
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    sentimentAnalysis(args) {
+      return this.textClassification({
+        MODEL: args.MODEL,
+        TEXT: args.TEXT,
+        MODEL_OPTIONS: args.MODEL_OPTIONS,
+        RUN_OPTIONS: args.RUN_OPTIONS,
+      });
+    }
+
+    async namedEntityRecognition(args) {
+      try {
+        clearLastError();
+        return await runEphemeralPipeline(
+          "token-classification",
+          Scratch.Cast.toString(args.MODEL),
+          args.MODEL_OPTIONS,
+          (pipeline) => {
+            const options = parseJSONObject(
+              args.RUN_OPTIONS,
+              Scratch.translate("run options")
+            );
+            return Object.keys(options).length > 0
+              ? pipeline(Scratch.Cast.toString(args.TEXT), options)
+              : pipeline(Scratch.Cast.toString(args.TEXT), {
+                  aggregation_strategy: "simple",
+                });
+          }
+        );
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async loadModel(args) {
+      try {
+        clearLastError();
+        const module = await ensureTransformers();
+        const id = getResourceId(args.ID, "model");
+        const modelName = Scratch.Cast.toString(args.MODEL);
+        const options = await withPretrainedOptions(
+          "model",
+          modelName,
+          args.OPTIONS
+        );
+        const model = await withRetry(
+          () => module.AutoModel.from_pretrained(modelName, options),
+          modelName
+        );
+        await setStoreValue(stores.models, id, model);
+        setLastProgress({
+          context: "model",
+          name: id,
+          info: {
+            status: "ready",
+            model: modelName,
+          },
+          timestamp: Date.now(),
+        });
+        return id;
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async runModel(args) {
+      try {
+        clearLastError();
+        const model = requireStoreValue(
+          stores.models,
+          args.ID,
+          Scratch.translate("Model")
+        );
+        const module = await ensureTransformers();
+        const inputs = parseMaybeStructuredInput(
+          args.INPUTS,
+          Scratch.translate("inputs")
+        );
+        if (!isPlainObject(inputs)) {
+          throw new Error(
+            Scratch.translate("Model inputs must be a JSON object.")
+          );
+        }
+        const result = await model(convertModelInputs(module, inputs));
+        return stringifyJSON(result);
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async disposeModel(args) {
+      await removeStoreValue(
+        stores.models,
+        Scratch.Cast.toString(args.ID).trim(),
+        Scratch.translate("Model"),
+        Scratch.translate("Model")
+      );
+    }
+
+    async loadTokenizer(args) {
+      try {
+        clearLastError();
+        const module = await ensureTransformers();
+        const id = getResourceId(args.ID, "tokenizer");
+        const modelName = Scratch.Cast.toString(args.MODEL);
+        const options = parseJSONObject(
+          args.OPTIONS,
+          Scratch.translate("tokenizer options")
+        );
+        options.progress_callback = createProgressCallback("tokenizer", modelName);
+        const tokenizer = await withRetry(
+          () => module.AutoTokenizer.from_pretrained(modelName, options),
+          modelName
+        );
+        await setStoreValue(stores.tokenizers, id, tokenizer);
+        return id;
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async tokenizerEncode(args) {
+      try {
+        clearLastError();
+        const tokenizer = requireStoreValue(
+          stores.tokenizers,
+          args.ID,
+          Scratch.translate("Tokenizer")
+        );
+        const input = parseMaybeStructuredInput(
+          args.INPUT,
+          Scratch.translate("input")
+        );
+        const result = await tokenizer(input);
+        return stringifyJSON(result);
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async tokenizerDecode(args) {
+      try {
+        clearLastError();
+        const tokenizer = requireStoreValue(
+          stores.tokenizers,
+          args.ID,
+          Scratch.translate("Tokenizer")
+        );
+        const tokens = parseMaybeStructuredInput(
+          args.TOKENS,
+          Scratch.translate("token IDs")
+        );
+        const decoded = await tokenizer.decode(tokens, {
+          skip_special_tokens: true,
+        });
+        return Scratch.Cast.toString(decoded);
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async disposeTokenizer(args) {
+      await removeStoreValue(
+        stores.tokenizers,
+        Scratch.Cast.toString(args.ID).trim(),
+        Scratch.translate("Tokenizer"),
+        Scratch.translate("Tokenizer")
+      );
+    }
+
+    async loadProcessor(args) {
+      try {
+        clearLastError();
+        const module = await ensureTransformers();
+        const id = getResourceId(args.ID, "processor");
+        const modelName = Scratch.Cast.toString(args.MODEL);
+        const options = parseJSONObject(
+          args.OPTIONS,
+          Scratch.translate("processor options")
+        );
+        options.progress_callback = createProgressCallback("processor", modelName);
+        const processor = await withRetry(
+          () => module.AutoProcessor.from_pretrained(modelName, options),
+          modelName
+        );
+        await setStoreValue(stores.processors, id, processor);
+        return id;
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async runProcessor(args) {
+      try {
+        clearLastError();
+        const module = await ensureTransformers();
+        const processor = requireStoreValue(
+          stores.processors,
+          args.ID,
+          Scratch.translate("Processor")
+        );
+        const input = parseMaybeStructuredInput(
+          args.INPUT,
+          Scratch.translate("input")
+        );
+        const result = await processor(
+          await normalizeProcessorInput(module, input)
+        );
+        return stringifyJSON(result);
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+        return Scratch.translate("Error: {message}", {
+          message: error.message || Scratch.Cast.toString(error),
+        });
+      }
+    }
+
+    async disposeProcessor(args) {
+      await removeStoreValue(
+        stores.processors,
+        Scratch.Cast.toString(args.ID).trim(),
+        Scratch.translate("Processor"),
+        Scratch.translate("Processor")
+      );
+    }
+
+    async cleanupAll() {
+      try {
+        clearLastError();
+        await disposeAllResources();
+      } catch (error) {
+        setLastError(error.message || Scratch.Cast.toString(error));
+      }
+    }
+
+    getVersion() {
+      return Scratch.translate(
+        "Transformers.js {libraryVersion} / extension {extensionVersion}",
+        {
+          libraryVersion: LIBRARY_VERSION,
+          extensionVersion: EXTENSION_VERSION,
+        }
+      );
+    }
+  }
+
+  Scratch.extensions.register(new HuggingFaceTransformersExtension());
+})(Scratch);
