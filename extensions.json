@@ -1,28 +1,6 @@
 {
     "extensions": [
         {
-            "slug": "cbeg",
-            "id": "cbeg",
-            "name": "CB Extension Gallery",
-            "description": "A lightweight tool to build Scratch extensions and open the CB Extension Gallery.",
-            "nameTranslations": {
-                "zh-cn": "CB Extension Gallery",
-                "en": "CB Extension Gallery"
-            },
-            "descriptionTranslations": {
-                "zh-cn": "一个轻量的 Scratch 扩展制作工具，并可直接打开 CB Extension Gallery。",
-                "en": "A lightweight tool to build Scratch extensions and open the CB Extension Gallery."
-            },
-            "image": "cbeg.png",
-            "by": [
-                {
-                    "name": "ChessBrainIsNotHuman",
-                    "link": "https://chessbrain.qzz.io/"
-                }
-            ],
-            "docs": false
-        },
-        {
             "slug": "kylin",
             "id": "kylin",
             "name": "kylin",
@@ -914,6 +892,28 @@
                 }
             ],
             "scratchCompatible": false,
+            "docs": false
+        },
+        {
+            "slug": "cbeg",
+            "id": "cbeg",
+            "name": "CB Extension Gallery",
+            "description": "A lightweight tool to build Scratch extensions and open the CB Extension Gallery.",
+            "nameTranslations": {
+                "zh-cn": "CB Extension Gallery",
+                "en": "CB Extension Gallery"
+            },
+            "descriptionTranslations": {
+                "zh-cn": "一个轻量的 Scratch 扩展制作工具，并可直接打开 CB Extension Gallery。",
+                "en": "A lightweight tool to build Scratch extensions and open the CB Extension Gallery."
+            },
+            "image": "cbeg.png",
+            "by": [
+                {
+                    "name": "ChessBrainIsNotHuman",
+                    "link": "https://chessbrain.qzz.io/"
+                }
+            ],
             "docs": false
         }
     ]
