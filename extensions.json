@@ -60,6 +60,20 @@
             "docs": false
         },
         {
+            "slug": "spinepro",
+            "id": "spinePro",
+            "name": "SpinePro",
+            "description": "Use Spine skeletal animation in Scratch projects.",
+            "image": "spinepro.svg",
+            "by": [
+                {
+                    "name": "PPN-design",
+                    "link": "https://github.com/DDguan2010"
+                }
+            ],
+            "docs": false
+        },
+        {
             "slug": "cybertoolbox",
             "id": "toolbox",
             "name": "Cybertoolbox",
